@@ -5,10 +5,10 @@ import { readFile } from 'node:fs/promises';
 const phoneSource = () => readFile(new URL('../src/phone.js', import.meta.url), 'utf8');
 const stylesSource = () => readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 
-test('手机主页直接渲染 18 个应用且不包含分页运行时', async () => {
+test('手机主页直接渲染 19 个应用且不包含分页运行时', async () => {
   const source = await phoneSource();
   const appsBlock = source.match(/const APPS = \[(?<apps>[\s\S]*?)\n\];/)?.groups?.apps || '';
-  assert.equal((appsBlock.match(/\bid:\s*'/g) || []).length, 18);
+  assert.equal((appsBlock.match(/\bid:\s*'/g) || []).length, 19);
   assert.doesNotMatch(source, /PAGE_SIZE|phone-dots|addEventListener\(['"]wheel['"]|\.map\(page/);
   assert.match(source, /<div class="phone-pages" id="phonePages">[\s\S]*?<div class="phone-page">\s*\$\{APPS\.map/);
 });

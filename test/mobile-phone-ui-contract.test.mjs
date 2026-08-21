@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-test('手机主页使用 5 列 4 行并保留 18 个应用', () => {
+test('手机主页使用 5 列 4 行并保留 19 个应用', () => {
   const js = fs.readFileSync('src/phone.js', 'utf8');
   const css = fs.readFileSync('src/styles.css', 'utf8');
-  assert.equal((js.match(/\{ id: '/g) || []).length, 18);
+  assert.equal((js.match(/\{ id: '/g) || []).length, 19);
   assert.match(css, /\.phone-page\s*\{[\s\S]*?grid-template-columns:\s*repeat\(5,/);
   assert.match(css, /\.phone-page\s*\{[\s\S]*?grid-template-rows:\s*repeat\(4,/);
   assert.match(css, /\.phone-page\s*\{[\s\S]*?gap:\s*(?!0)/);

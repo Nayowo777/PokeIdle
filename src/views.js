@@ -1,4 +1,4 @@
-import { CANDY_EXCHANGE, ITEM_NAMES, ITEM_RATES, CATCH_RATES, CATCH_BONUS_INC, ULTRA_BALL_ADD, FLEE_CHANCE, FLEE_CHANCE_INC, FLEE_CHANCE_MAX, SHINY_CHANCE, CHARM_SHINY_CHANCE, ENCOUNTER_MIN, ENCOUNTER_MAX, BUFF_DURATION, BUFF_ENCOUNTER_MIN, BUFF_ENCOUNTER_MAX, HONEY_RARITY_BOOST, CHARM_RARITY_BOOST, FISH_POKEMON_CHANCE, FISH_BUFF_POKEMON_CHANCE, FISH_RARE_RATE, FISH_WAIT_MIN, FISH_WAIT_MAX, FISH_QTY_MIN, FISH_QTY_MAX, FISH_TRIGGER_MIN, FISH_TRIGGER_MAX, REGION_CYCLE, PX_PER_METER, AUTO_FLEE_TIMEOUT, ROAD_SPECIAL_CHANCE, ROAD_WIDTH_MIN, ROAD_WIDTH_MAX, ROAD_SPEED_WALK, ROAD_SPEED_RUN, ROAD_SPEED_BIKE, ROAD_SWITCH_CYCLES, HATCH_DIST_MIN, HATCH_DIST_MAX, BOUNTY_PER_REGION, BOUNTY_CANDY_MIN, BOUNTY_CANDY_MAX, BLOCK_DISTANCE, BLOCK_TARGET_CHANCE, BLOCK_QUALITY, TRADE_REFRESH_MS, TRADE_SHINY_CHANCE, FARM_PLANT_COST, FARM_MATURE_MIN, FARM_MATURE_MAX, FARM_HARVEST_MIN, FARM_HARVEST_MAX, FARM_MAX_WATER, FARM_WATER_DROP, FARM_BOARD_DEMANDS, FARM_BOARD_BIG_QTY_MIN, FARM_BOARD_BIG_QTY_MAX, FARM_HELPER_WORK_STAGE, FARM_HELPER_REST, FARM_HELPER_STAGE_COST, FARM_HELPER_STAGE_INC, FARM_HELPER_WORK_MIN, FARM_HELPER_WORK_MAX,
+import { CANDY_EXCHANGE, ITEM_NAMES, ITEM_RATES, CATCH_RATES, CATCH_BONUS_INC, ULTRA_BALL_ADD, FLEE_CHANCE, FLEE_CHANCE_INC, FLEE_CHANCE_MAX, SHINY_CHANCE, CHARM_SHINY_CHANCE, ENCOUNTER_MIN, ENCOUNTER_MAX, BUFF_DURATION, BUFF_ENCOUNTER_MIN, BUFF_ENCOUNTER_MAX, HONEY_RARITY_BOOST, CHARM_RARITY_BOOST, FISH_POKEMON_CHANCE, FISH_BUFF_POKEMON_CHANCE, FISH_RARE_RATE, FISH_WAIT_MIN, FISH_WAIT_MAX, FISH_QTY_MIN, FISH_QTY_MAX, FISH_TRIGGER_MIN, FISH_TRIGGER_MAX, REGION_CYCLE, PX_PER_METER, AUTO_FLEE_TIMEOUT, ROAD_SPECIAL_CHANCE, ROAD_WIDTH_MIN, ROAD_WIDTH_MAX, ROAD_SPEED_WALK, ROAD_SPEED_RUN, ROAD_SPEED_BIKE, ROAD_SWITCH_CYCLES, HATCH_DIST_MIN, HATCH_DIST_MAX, BOUNTY_PER_REGION, BOUNTY_CANDY_MIN, BOUNTY_CANDY_MAX, BLOCK_DISTANCE, BLOCK_TARGET_CHANCE, BLOCK_QUALITY, TRADE_REFRESH_MS, TRADE_SHINY_CHANCE, FARM_PLANT_COST, FARM_MATURE_MIN, FARM_MATURE_MAX, FARM_HARVEST_MIN, FARM_HARVEST_MAX, FARM_MAX_WATER, FARM_WATER_DROP, FARM_BOARD_DEMANDS, FARM_BOARD_BIG_QTY_MIN, FARM_BOARD_BIG_QTY_MAX, FARM_BOARD_MEGA_QTY_MIN, FARM_BOARD_MEGA_QTY_MAX, FARM_HELPER_WORK_STAGE, FARM_HELPER_REST, FARM_HELPER_STAGE_COST, FARM_HELPER_STAGE_INC, FARM_HELPER_WORK_MIN, FARM_HELPER_WORK_MAX,
   MASS_GEN_MIN, MASS_GEN_MAX, MASS_DURATION, MASS_COUNT_MIN, MASS_COUNT_MAX,
   MASS_SPAWN_MIN, MASS_SPAWN_MAX, MASS_SPAWN_HONEY_MIN, MASS_SPAWN_HONEY_MAX, MASS_SHINY_CHANCE,
   TWIST_GEN_MIN, TWIST_GEN_MAX, TWIST_DURATION, TWIST_COUNT_MIN, TWIST_COUNT_MAX,
@@ -6,12 +6,13 @@ import { CANDY_EXCHANGE, ITEM_NAMES, ITEM_RATES, CATCH_RATES, CATCH_BONUS_INC, U
   TWIST_RGB_CHANCE, TWIST_POLLUTED_CHANCE, WILD_LEVEL_MAX,
   TRAIN_SLOTS, TRAIN_XP_PER_MIN, TRAIN_LAZY,
   TRAIN_SATIETY_MAX, TRAIN_SATIETY_DRAIN_PER_MIN, TRAIN_SATIETY_EAT_AT,
-  TRAIN_SATIETY_PER_BERRY, TRAIN_HUNGRY_LAZY_MULT,
+  TRAIN_SATIETY_PER_BERRY,
   BATTLE_REFRESH_MS, BATTLE_NPC_COUNTS, BATTLE_MONS_COUNT, ITEM_DESC,
   COIN_RATE, DEALER_STAND, BJ_MULT, HAND_SIZE, RIICHI_COST,
   GACHA_DRAW_COST, GACHA_DUP_REFUND, EXP_CANDY_XP, EXP_CANDY_DROP, RELEASE_XP_RATE,
   TRADE_LEVEL_CHANCE, TRADE_WANT_LEVEL_MIN, TRADE_WANT_LEVEL_MAX,
-  FOLLOWER_DRAW_COST, FOLLOWER_TIER_CHANCE, FOLLOWER_TIER_DUR, FOLLOWER_TIER_BOOST, ITEM_SELL_RATE } from './config.js';
+  FOLLOWER_DRAW_COST, FOLLOWER_TIER_CHANCE, FOLLOWER_TIER_DUR, FOLLOWER_TIER_BOOST, ITEM_SELL_RATE,
+  DISPATCH_DURATIONS, DISPATCH_DUR_MULT, DISPATCH_CANDY_PER_HOUR, DISPATCH_CANDY_JITTER, DISPATCH_VALUE_PER_HOUR, DISPATCH_SPEED_MIN, DISPATCH_SPEED_MAX, DISPATCH_FREE_SLOTS, DISPATCH_TYPE_BOOST } from './config.js';
 import { phase, gameData, allPokemon, getPokemonByIndex, getCurrentRegion, currentEncounter, currentIsShiny, honeyBuffActive, charmBuffActive, saveGame, addSystemLog, formatNum, pad, randInt, pushNav, setGameData, getDefaultSave, ensureGpsState, normalizeBackgroundState, _fishing } from './state.js';
 import { $, showView, updateTextBox, updateBackpack, updateStats, isOnGameView, applyCharSprites, showConfirmBar } from './ui.js';
 import { doCandyExchange, doSellBall, activateHoney, activateShinyCharm, ITEM_ICONS, BERRY_ICONS, BERRY_NAMES } from './items.js';
@@ -476,6 +477,12 @@ export function renderSystemLogs() {
       case 'nursery_egg':
         desc = `产下 ${log.details.shiny ? '闪光' : ''}${logName(log)} 的蛋`;
         break;
+      case 'dispatch_start':
+        desc = `${logName(log)} 出发派遣 ${log.details.duration / 60} 小时`;
+        break;
+      case 'dispatch_done':
+        desc = `${logName(log)} 完成派遣，带回${(log.details.rewards || []).map(r => `${ITEM_NAMES[r.key] || r.key}×${r.qty}`).join('、')}`;
+        break;
       case 'pokemon_release':
         desc = `放生了${log.details.shiny ? '闪光' : ''}${logName(log)}`;
         break;
@@ -841,7 +848,7 @@ async function refreshBackgroundModeSupport() {
 }
 
 // 捕捉条件表格：遇敌类型 × 三态策略（普通 / 普通闪 / 神兽 / 神兽闪 / 可悬赏）
-// 优先级：神兽/神兽闪 > 可悬赏 > 普通/普通闪；可悬赏行只作用于非神兽遭遇
+// 优先级：神兽/神兽闪 > 普通/普通闪 >可悬赏；可悬赏行只作用于非神兽遭遇
 const CF_ROWS = [
   { key: 'normal', label: '普通' },
   { key: 'normalShiny', label: '普通闪' },
@@ -1323,7 +1330,7 @@ export function renderSettings(container, s) {
     let v = '';
     try { v = await window.__TAURI__?.app?.getVersion?.(); } catch (_) {}
     const el = container.querySelector('#settingsVersion');
-    if (el) el.textContent = v ? `v${v}` : 'v1.0.9';
+    if (el) el.textContent = v ? `v${v}` : 'v1.1.0';
   })();
   // 版权声明：跳转声明视图
   container.querySelector('#declarationBtn')?.addEventListener('click', () => showDeclarationView());
@@ -1656,7 +1663,7 @@ const TUTORIAL_SECTIONS = [
   {
     title: '手机',
     html: `<p>点击标题栏的<b>手机</b>按钮进入，里面放着常用的应用（<b>导航</b>、<b>图鉴</b>、<b>孵蛋器</b>、<b>混合器</b>、<b>农场</b>、<b>交换</b>、<b>成就</b>、<b>统计</b>……），也可以查看当前系统时间。</p>`
-      + `<p>滚动滚轮或点击底部圆点可翻到<b>第二页</b>，那里放着<b>日志</b>、<b>饲育屋</b>、<b>训练</b>、<b>配队</b>、<b>对战</b>、<b>游戏厅</b>与<b>卡册</b>应用。科学的力量真伟大！</p>`
+      + `<p>滚动滚轮或点击底部圆点可翻到<b>第二页</b>，那里放着<b>日志</b>、<b>饲育屋</b>、<b>训练</b>、<b>配队</b>、<b>对战</b>、<b>游戏厅</b>、<b>卡册</b>与<b>派遣</b>应用。科学的力量真伟大！</p>`
   },
   {
     title: '图鉴',
@@ -1751,7 +1758,7 @@ const TUTORIAL_SECTIONS = [
 
   {
     title: '糖果',
-    html: `<p><b>糖果</b>是本游戏的唯一货币，通过挂机掉落、钓鱼、完成委托、完成悬赏、对战、成就等获得，能在手机里虚拟存储，用于解锁<b>孵蛋器</b>槽位、<b>农场</b>购买种子，也可在<b>商店</b>兑换道具（详见「<b>商店</b>」章节）。</p>`
+    html: `<p><b>糖果</b>是本游戏的唯一货币，通过挂机掉落、钓鱼、完成委托、完成悬赏、对战、成就、派遣等获得，能在手机里虚拟存储，用于解锁<b>孵蛋器</b>槽位、<b>农场</b>购买种子、解锁<b>派遣</b>格子，也可在<b>商店</b>兑换道具（详见「<b>商店</b>」章节）。</p>`
       + `<p>注意区分道具<b>经验糖果</b>：它不是货币，而是给宝可梦直接加经验的消耗品，只能从 NPC 对战掉落获得（详见「<b>经验糖果</b>」章节）。</p>`
   },
   {
@@ -1828,7 +1835,7 @@ const TUTORIAL_SECTIONS = [
       + `<p>刚种下<b>湿度</b>为 <b>0</b>，点击<b>浇水</b>才会生长；湿度随时间下降（每 <b>${Math.round(1 / FARM_WATER_DROP)}</b> 秒降 <b>1</b> 点，满湿度可撑 <b>${Math.round(FARM_MAX_WATER / FARM_WATER_DROP / 60)}</b> 分钟），归 <b>0</b> 停止生长，需及时补浇。</p>`
       + `<p>历经刚种下→发芽→成长→开花结果后成熟（每棵 <b>${Math.round(FARM_MATURE_MIN / 60000)}~${Math.round(FARM_MATURE_MAX / 60000)}</b> 分钟随机），点击收获得 <b>${FARM_HARVEST_MIN}~${FARM_HARVEST_MAX}</b> 颗树果。</p>`
       + `<p>收获的树果存入库存（点田地左上角库存箱查看）；库存的树果不能当种子，种地只能另买新种子。</p>`
-      + `<p>点田地右上角告示牌查看树果委托（每天刷新 <b>${FARM_BOARD_DEMANDS}</b> 条，其中第 <b>1</b> 条为大量需求 <b>${FARM_BOARD_BIG_QTY_MIN}~${FARM_BOARD_BIG_QTY_MAX}</b> 颗，需专门种植较久；需求越多报酬越高）。也可以在此面板招募帮手（详见「<b>招募帮手</b>」章节）。</p>`,
+      + `<p>点田地右上角告示牌查看树果委托（每天刷新 <b>${FARM_BOARD_DEMANDS}</b> 条，其中 <b>1</b> 条为大量需求 <b>${FARM_BOARD_BIG_QTY_MIN}~${FARM_BOARD_BIG_QTY_MAX}</b> 颗、<b>1</b> 条为巨量需求 <b>${FARM_BOARD_MEGA_QTY_MIN}~${FARM_BOARD_MEGA_QTY_MAX}</b> 颗，需专门种植较久；需求越多报酬越高）。也可以在此面板招募帮手（详见「<b>招募帮手</b>」章节）。</p>`,
   },  
   {
     title: '宝可梦',
@@ -1852,8 +1859,8 @@ const TUTORIAL_SECTIONS = [
     html: `<p>在<b>手机</b>页面打开<b>训练</b>应用即可进入训练场。</p>`
       + `<p>点场地上的<b>告示牌</b>打开管理面板：顶部 <b>${TRAIN_SLOTS}</b> 个槽位，点空位去仓库放入一只、再点已有取出；底部可查看每只的状态（名字前的灰色点代表在偷懒）。</p>`
       + `<p>挂机自动获得经验 <b>${TRAIN_XP_PER_MIN}</b>/分钟，不消耗糖果；放入训练后自动从<b>队伍</b>中撤下（训练/队伍互斥）。</p>`
-      + `<p>训练会消耗<b>饱食度</b>（上限 <b>${TRAIN_SATIETY_MAX}</b>、每分钟降 <b>${TRAIN_SATIETY_DRAIN_PER_MIN}</b>）：低于 <b>${TRAIN_SATIETY_EAT_AT}</b> 时自动吃掉库存里它爱吃的树果补充 <b>${TRAIN_SATIETY_PER_BERRY}</b> 点（<b>图鉴</b>可查爱吃的食物），没存货就只能饿着——点场地右上角的<b>纸箱</b>查看库存。</p>`
-      + `<p>训练中偶尔会<b>偷懒</b>（约 <b>${Math.round(TRAIN_LAZY.chancePerMin * 100)}</b>%/分钟，暂停 <b>${TRAIN_LAZY.durationMin / 1000 / 60}~${TRAIN_LAZY.durationMax / 1000 / 60}</b> 分钟）；饱食度越低越容易偷懒，最多放大 <b>${TRAIN_HUNGRY_LAZY_MULT}</b> 倍。</p>`
+      + `<p>训练会消耗<b>饱食度</b>（上限 <b>${TRAIN_SATIETY_MAX}</b>、每分钟降 <b>${TRAIN_SATIETY_DRAIN_PER_MIN}</b>）：降到 <b>${TRAIN_SATIETY_EAT_AT}</b> 时自动吃库存里它爱吃的树果补充 <b>${TRAIN_SATIETY_PER_BERRY}</b> 点，正好回满（<b>图鉴</b>可查爱吃的食物），没存货就会饿到<b>饱食度归零并一直偷懒</b>——点场地右上角的<b>纸箱</b>查看库存。</p>`
+      + `<p>训练中偶尔会<b>偷懒</b>（约 <b>${Math.round(TRAIN_LAZY.chancePerMin * 100)}</b>%/分钟，暂停 <b>${TRAIN_LAZY.durationMin / 1000 / 60}~${TRAIN_LAZY.durationMax / 1000 / 60}</b> 分钟）；饱食度越低越容易偷懒，饱食度<b>归零</b>时会一直偷懒，直到吃上树果才恢复。</p>`
       + `<p>偷懒的宝可梦会停止跳动，鼠标移上去点一下即可叫醒；</p>`,
   },
   {
@@ -1957,6 +1964,18 @@ const TUTORIAL_SECTIONS = [
         ], ['属性', '增益'], ['auto', 'auto'])
   },
   {
+    title: '派遣',
+    html: `<p>在<b>手机</b>第二页打开<b>派遣</b>应用：把仓库里的宝可梦派出去探险，带回<b>糖果</b>与道具。初始 <b>${DISPATCH_FREE_SLOTS}</b> 格，更多格子用<b>糖果</b>解锁。</p>`
+      + `<p>放入后槽位上点<b>配置</b>选时长、点<b>出发</b>才开始计时；速度越快的宝可梦完成得越早（耗时系数 <b>${DISPATCH_SPEED_MIN} ~ ${DISPATCH_SPEED_MAX}</b>）。糖果按档位小时结算（基准如下，结算时随机浮动 <b>±${Math.round(DISPATCH_CANDY_JITTER * 100)}%</b>），选更久带倍率加成：</p>`
+      + tutorialTable(DISPATCH_DURATIONS.map((h, i) => [`<b>${h}</b> 小时`, `<b>${h * DISPATCH_CANDY_PER_HOUR}</b> 颗（基准）`, `×<b>${DISPATCH_DUR_MULT[i]}</b>`]), ['时长', '糖果', '档位加成'], [60, 'auto', 'auto'])
+      + `<p>道具方面，每 <b>1 小时</b> 攒 <b>${DISPATCH_VALUE_PER_HOUR}</b> 价值预算，按道具价值分配数量——便宜的堆数量、贵重的限 1 个。不同<b>属性</b>带回的道具侧重不同（按<b>主属性</b>计算，双属性只看第一个）：</p>`
+      + tutorialTable(Object.entries(Object.entries(DISPATCH_TYPE_BOOST).reduce((acc, [type, boost]) => {
+        for (const k of Object.keys(boost)) (acc[k] ||= []).push(type);
+        return acc;
+      }, {})).map(([k, types]) => [ITEM_NAMES[k] || k, types.join('、')]), ['道具', '属性'], ['auto', 'auto'])
+      + `<p>派遣是<b>唯一的离线收益</b>：离线照常计时，完成后领取，宝可梦留在槽位可直接再出发。</p>`,
+  },
+  {
     title: '自动操作',
     html: `<p>开启后遇敌自动处理：勾选球种即<b>自动捕获</b>（按捕获率智能选球），一个球都不勾则<b>自动逃跑</b>。</p>`
       + `<p><b>自动丢球</b>：判定为「捕捉」后会自动<b>连续丢球直到捕获或逃跑</b>。球种按<b>智能选球</b>——<b>神兽或捕获率低</b>的宝可梦优先 <b>大师球→高级球→精灵球</b>，捕获率高的普通宝可梦优先 <b>精灵球</b> 省资源；只在勾选的球种中挑选，优先球种没库存自动顺延。</p>`
@@ -2032,6 +2051,7 @@ const TUTORIAL_SUMMARIES = {
   '口袋麻将': '玩法借鉴自原子碰将，只有对对胡。',
   '抽卡机': '单纯收集卡牌，无特殊作用。',
   '随从': '不知道干什么的时候可以抽一只随从。',
+  '派遣': '离线也计入派遣时长。',
   '自动操作': '好好设置一下，解放双手必备。',
   '佛系模式': '慢节奏玩家可以开启。',
   '系统日志': '开启自动操作后可以经常看看。',
