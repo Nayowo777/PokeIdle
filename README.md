@@ -23,6 +23,10 @@
   <a href="https://github.com/ZTMYO/PokeIdle">https://pokeidle.shiliu.space/</a>
 </p>
 
+## 项目关系
+
+本项目基于原项目 [ZTMYO/PokeIdle](https://github.com/ZTMYO/PokeIdle) 继续开发。当前分支为 [Nayowo777/PokeIdle 的 Android 增强分支](https://github.com/Nayowo777/PokeIdle/tree/feature/save-transfer)，主要包含 Android 后台挂机、跨平台存档导入导出、手机界面优化、道路坐标适配和正式签名 APK 构建支持。
+
 
 ## 截图预览
 
@@ -151,6 +155,8 @@ npm run android:build
 ```
 
 正式 APK 和 SHA-256 校验文件输出到 `dist/android/`。环境准备、真机安装、签名校验和免费分发要求见 [Android 正式版构建与发布](docs/android-release.md)。
+
+当前 Android 增强分支地址：<https://github.com/Nayowo777/PokeIdle/tree/feature/save-transfer>。该分支的正式 APK 文件名为 `pokeidle-android-v1.0.13.apk`，生成后可直接安装到 Android 8.0（API 26）及以上设备。
 
 Android 设置页的“后台挂机”仅在 Android 外壳中可用。首次启用需要允许通知权限；通知栏的“停止挂机”操作会同步关闭游戏内开关。后台服务不会播放动画或音乐，回到前台后会按时间戳补算期间的遇敌、抓捕和逃跑结果。
 

@@ -1096,10 +1096,16 @@ export function renderSettings(container, s) {
         </div>
         <div id="saveTransferStatus" class="save-transfer-status" aria-live="polite" role="status"></div>
       </div>
-      <a href="https://github.com/ZTMYO/PokeIdle" id="githubLink" class="settings-footer-link" target="_blank" rel="noopener">
-        <svg viewBox="0 0 1024 1024" width="16" height="16" style="flex-shrink:0;"><use xlink:href="#icon-github"/></svg>
-        <span style="font-weight:600;">ZTMYO</span>
-      </a>
+      <div class="settings-project-links">
+        <a href="https://github.com/ZTMYO/PokeIdle" id="githubLink" class="settings-footer-link" target="_blank" rel="noopener">
+          <svg viewBox="0 0 1024 1024" width="16" height="16" style="flex-shrink:0;"><use xlink:href="#icon-github"/></svg>
+          <span style="font-weight:600;">原项目：ZTMYO/PokeIdle</span>
+        </a>
+        <a href="https://github.com/Nayowo777/PokeIdle/tree/feature/save-transfer" id="androidBranchLink" class="settings-footer-link" target="_blank" rel="noopener">
+          <svg viewBox="0 0 1024 1024" width="16" height="16" style="flex-shrink:0;"><use xlink:href="#icon-github"/></svg>
+          <span style="font-weight:600;">Android 分支：Nayowo777/PokeIdle</span>
+        </a>
+      </div>
       <div class="settings-version" id="settingsVersion"></div>
       <div id="declarationBtn" style="text-align:center;font-size:9px;opacity:0.5;padding:2px 0 4px;cursor:pointer;">版权声明</div>
     </div>
@@ -1294,6 +1300,13 @@ export function renderSettings(container, s) {
   container.querySelector('#githubLink')?.addEventListener('click', (e) => {
     e.preventDefault();
     const url = 'https://github.com/ZTMYO/PokeIdle';
+    if (window.__POKEIDLE_MOBILE__?.openExternal) window.__POKEIDLE_MOBILE__.openExternal(url);
+    else if (window.__TAURI__?.opener?.openUrl) window.__TAURI__.opener.openUrl(url);
+    else window.open(url, '_blank');
+  });
+  container.querySelector('#androidBranchLink')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const url = 'https://github.com/Nayowo777/PokeIdle/tree/feature/save-transfer';
     if (window.__POKEIDLE_MOBILE__?.openExternal) window.__POKEIDLE_MOBILE__.openExternal(url);
     else if (window.__TAURI__?.opener?.openUrl) window.__TAURI__.opener.openUrl(url);
     else window.open(url, '_blank');
