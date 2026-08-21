@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { settleBackgroundItems } from '../src/background-items.js';
+import { settleBackgroundSlice } from '../src/background-settlement.js';
 
 function data(overrides = {}) {
   return {
@@ -131,5 +132,74 @@ test('非法余数和库存字段按零处理且后台日志按道具合并', ()
     time: 2_000,
     type: 'item_gain',
     details: { item: 'candy', qty: 4, drops: 2, background: true },
+  }]);
+});
+
+test('同一时间片先获得的精灵球可供随后遇敌消耗', () => {
+  const gameData = data();
+  const settled = settleBackgroundSlice({
+    settledAt: 0,
+    balls: {},
+    gameData,
+  }, {
+    now: 1_000,
+    encounterEveryMs: 1_000,
+    resolveElapsed: ({ state, from, to }) => settleBackgroundItems({
+      state,
+      from,
+      to,
+      itemRates: { 'poke-ball': 1 },
+      enabled: true,
+    }),
+    resolveEncounter: ({ state }) => state.balls['poke-ball'] > 0
+      ? { result: 'caught', ball: 'poke-ball' }
+      : { result: 'fled' },
+  });
+
+  assert.equal(settled.results[0].result, 'caught');
+  assert.equal(settled.state.balls['poke-ball'], 0);
+});
+
+test('遇敌消耗精灵球后后续掉落不会把旧库存重新计入', () => {
+  const gameData = data();
+  const settled = settleBackgroundSlice({
+    settledAt: 0,
+    balls: {},
+    gameData,
+  }, {
+    now: 2_000,
+    encounterEveryMs: 1_000,
+    resolveElapsed: ({ state, from, to }) => settleBackgroundItems({
+      state,
+      from,
+      to,
+      itemRates: { 'poke-ball': 1 },
+      enabled: true,
+    }),
+    resolveEncounter: () => ({ result: 'caught', ball: 'poke-ball' }),
+  });
+
+  assert.equal(settled.state.balls['poke-ball'], 0);
+  assert.equal(settled.state.gameData.items['poke-ball'], 1);
+});
+
+test('相同后台批次的同类道具日志合并为一条', () => {
+  const gameData = data();
+  const state = { gameData, balls: {} };
+  const options = {
+    state,
+    itemRates: { candy: 1 },
+    candyMultipliers: [{ mult: 1, weight: 1 }],
+    enabled: true,
+    logTime: 2_000,
+  };
+
+  settleBackgroundItems({ ...options, from: 0, to: 1_000 });
+  settleBackgroundItems({ ...options, from: 1_000, to: 2_000 });
+
+  assert.deepEqual(gameData.systemLogs, [{
+    time: 2_000,
+    type: 'item_gain',
+    details: { item: 'candy', qty: 2, drops: 2, background: true },
   }]);
 });

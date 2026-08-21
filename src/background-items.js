@@ -67,6 +67,17 @@ function rollCandyMultiplier(multipliers, random) {
 }
 
 function pushBackgroundLog(gameData, item, qty, drops, time) {
+  const existing = gameData.systemLogs.find(log =>
+    log?.time === time
+    && log.type === 'item_gain'
+    && log.details?.background === true
+    && log.details?.item === item,
+  );
+  if (existing) {
+    existing.details.qty = finiteNonNegative(existing.details.qty) + qty;
+    existing.details.drops = finiteNonNegative(existing.details.drops) + drops;
+    return;
+  }
   gameData.systemLogs.push({
     time,
     type: 'item_gain',
@@ -90,6 +101,7 @@ export function settleBackgroundItems({
   candyMultipliers = CANDY_DROP_MULT,
   random = Math.random,
   enabled = true,
+  logTime = to,
 } = {}) {
   const result = { items: {}, drops: {} };
   if (!enabled || !state?.gameData || !Number.isFinite(from) || !Number.isFinite(to) || to <= from) {
@@ -120,7 +132,9 @@ export function settleBackgroundItems({
         qty += rollCandyMultiplier(candyMultipliers, random);
       }
     }
-    const currentInventory = finiteNonNegative(gameData.items[item]);
+    const currentInventory = BALLS.has(item)
+      ? finiteNonNegative(state.balls[item])
+      : finiteNonNegative(gameData.items[item]);
     const currentEarned = finiteNonNegative(gameData.stats.totalItemsEarned[item]);
     const currentBackground = finiteNonNegative(gameData.background.stats.items[item]);
     gameData.items[item] = currentInventory + qty;
@@ -130,7 +144,7 @@ export function settleBackgroundItems({
     result.items[item] = qty;
     result.drops[item] = drops;
     if (BALLS.has(item)) state.balls[item] = gameData.items[item];
-    pushBackgroundLog(gameData, item, qty, drops, to);
+    pushBackgroundLog(gameData, item, qty, drops, logTime);
   }
 
   return result;

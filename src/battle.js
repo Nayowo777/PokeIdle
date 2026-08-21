@@ -13,6 +13,7 @@ import * as particles from './particles.js';
 import { settleBackgroundSlice } from './background-settlement.js';
 import { resolveBackgroundEncounter } from './background-battle.js';
 import { settleBackgroundItems } from './background-items.js';
+import { commitBackgroundState } from './background-transaction.js';
 
 let _backgroundSettlementQueue = Promise.resolve();
 
@@ -44,6 +45,7 @@ export function settleBackgroundEncounters(now = Date.now()) {
         from,
         to,
         enabled: background.roadItemsEnabled === true,
+        logTime: now,
       }),
       resolveEncounter: ({ state: next, at }) => {
         const pokemon = pickRandomPokemon();
@@ -85,13 +87,13 @@ export function settleBackgroundEncounters(now = Date.now()) {
         };
       }
     }
-    setGameData(nextData);
-    try {
-      await saveGame({ strict: true });
-    } catch (error) {
-      setGameData(original);
-      throw error;
-    }
+    await commitBackgroundState({
+      originalData: original,
+      nextData,
+      setData: setGameData,
+      save: saveGame,
+      requiredSource: window.__POKEIDLE_MOBILE__?.isMobile ? 'mobile' : null,
+    });
     return settled;
   });
   _backgroundSettlementQueue = operation;
