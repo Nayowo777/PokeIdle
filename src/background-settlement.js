@@ -65,9 +65,12 @@ export function settleBackgroundSlice(state, options = {}) {
   const results = [];
   let encounters = 0;
   let pausedAt = null;
+  let elapsedCursor = processingStart;
 
   for (let index = 0; index < plannedEncounters; index += 1) {
     const at = processingStart + (encounterEveryMs - previousRemainderMs) + (index * encounterEveryMs);
+    options.resolveElapsed?.({ state: nextState, from: elapsedCursor, to: at });
+    elapsedCursor = at;
     const result = options.resolveEncounter({
       state: nextState,
       random: options.random?.(),
@@ -98,6 +101,7 @@ export function settleBackgroundSlice(state, options = {}) {
       results,
     };
   }
+  options.resolveElapsed?.({ state: nextState, from: elapsedCursor, to: now });
   if (hasEncounterInterval) {
     nextState.encounterRemainderMs = accumulatedEncounterMs % encounterEveryMs;
   }

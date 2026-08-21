@@ -113,6 +113,37 @@ test('累计 caught、fled 和 continue 结果并扣除各自返回的球', () =
   assert.deepEqual(settled.state.balls, { 'poke-ball': 0, 'great-ball': 0 });
 });
 
+test('每次遇敌前和尾段按时间顺序结算经过时间', () => {
+  const spans = [];
+  const encounters = [];
+  const result = settleBackgroundSlice({ settledAt: 0, balls: {}, stats: {} }, {
+    now: 2_500,
+    encounterEveryMs: 1_000,
+    resolveElapsed: ({ from, to }) => spans.push([from, to]),
+    resolveEncounter: ({ at }) => {
+      encounters.push(at);
+      return { result: 'fled' };
+    },
+  });
+
+  assert.deepEqual(spans, [[0, 1_000], [1_000, 2_000], [2_000, 2_500]]);
+  assert.deepEqual(encounters, [1_000, 2_000]);
+  assert.equal(result.state.settledAt, 2_500);
+});
+
+test('暂停遭遇后不结算暂停点之后的经过时间', () => {
+  const spans = [];
+  const result = settleBackgroundSlice({ settledAt: 0, balls: {}, stats: {} }, {
+    now: 3_000,
+    encounterEveryMs: 1_000,
+    resolveElapsed: ({ from, to }) => spans.push([from, to]),
+    resolveEncounter: () => ({ result: 'paused' }),
+  });
+
+  assert.deepEqual(spans, [[0, 1_000]]);
+  assert.equal(result.state.settledAt, 1_000);
+});
+
 test('时间相等或回拨时不结算，并从回拨后的时间继续推进', () => {
   const state = {
     settledAt: 100_000,
