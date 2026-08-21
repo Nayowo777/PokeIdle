@@ -2,7 +2,7 @@
   <img src="src-tauri/icons/icon.png" width="120" alt="口袋挂机" />
 </p>
 
-<h1 align="center">口袋挂机</h1>
+<h1 align="center">口袋挂机安卓分支</h1>
 
 <p align="center">
   <em>基于 Tauri v2 的桌面挂机游戏 · 纯前端 HTML/CSS/JS + Rust 后端存档</em>
