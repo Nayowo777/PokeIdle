@@ -50,6 +50,9 @@ export function createSavePlatform({
 
   return {
     async pickImportFile() {
+      if (mobile?.pickImportFile) {
+        return await mobile.pickImportFile();
+      }
       if (tauri?.core?.invoke) {
         return await tauri.core.invoke('import_save_data') || null;
       }

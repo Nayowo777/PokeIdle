@@ -1,59 +1,48 @@
 import { App } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
-import { Capacitor } from '@capacitor/core';
-import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
-import { Share } from '@capacitor/share';
-import { createMobileSaveTransfer } from './save-native.mjs';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { calculateMobileLayout } from './viewport-utils.mjs';
 import { createBackgroundMode } from './background-mode.mjs';
 
-const SAVE_PATH = 'save.json';
-const BACKUP_PATH = 'save.json.bak';
 let saveQueue = Promise.resolve();
-
-async function readData(path) {
-  try {
-    const result = await Filesystem.readFile({ path, directory: Directory.Data, encoding: Encoding.UTF8 });
-    return typeof result.data === 'string' ? result.data : null;
-  } catch (_) {
-    return null;
-  }
-}
-
-const saveTransfer = createMobileSaveTransfer({ Filesystem, Share, App, Directory, Encoding });
+const NativeSave = registerPlugin('PokeIdleSave');
 const backgroundMode = createBackgroundMode({ capacitor: Capacitor });
 
 const mobileBridge = {
   isMobile: true,
 
   async loadGameData() {
-    const [main, backup] = await Promise.all([readData(SAVE_PATH), readData(BACKUP_PATH)]);
-    return { main, backup };
+    return NativeSave.loadGameData();
   },
 
   saveGameData(data) {
-    const operation = saveQueue.catch(() => {}).then(async () => {
-      const current = await readData(SAVE_PATH);
-      if (current) {
-        await Filesystem.writeFile({
-          path: BACKUP_PATH,
-          data: current,
-          directory: Directory.Data,
-          encoding: Encoding.UTF8,
-        });
-      }
-      await Filesystem.writeFile({
-        path: SAVE_PATH,
-        data,
-        directory: Directory.Data,
-        encoding: Encoding.UTF8,
-      });
-    });
+    const operation = saveQueue.catch(() => {}).then(() => NativeSave.saveGameData({ data }));
     saveQueue = operation;
     return operation;
   },
 
-  ...saveTransfer,
+  async pickImportFile() {
+    const result = await NativeSave.pickImportFile();
+    return result?.cancelled ? null : result;
+  },
+
+  async exportSaveData(data, fileName) {
+    const result = await NativeSave.exportSaveData({ data, fileName });
+    return result?.cancelled ? null : result;
+  },
+
+  createImportBackup(data) {
+    return NativeSave.createImportBackup({ data });
+  },
+
+  async loadImportBackup() {
+    const result = await NativeSave.loadImportBackup();
+    return result?.data ?? null;
+  },
+
+  async getAppVersion() {
+    return (await App.getInfo()).version;
+  },
 
   startBackgroundMode: () => backgroundMode.startBackgroundMode(),
   stopBackgroundMode: () => backgroundMode.stopBackgroundMode(),

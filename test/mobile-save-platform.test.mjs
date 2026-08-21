@@ -5,9 +5,13 @@ import { readFile } from 'node:fs/promises';
 import { SAVE_MAX_BYTES, SaveTransferError } from '../src/save-transfer.js';
 import { createSavePlatform, pickBrowserImportFile } from '../src/save-platform.js';
 
-test('Android 导出和备份优先调用移动 bridge', async () => {
+test('Android 导入、导出和备份优先调用移动 bridge', async () => {
   const calls = [];
   const mobile = {
+    pickImportFile: async () => {
+      calls.push(['import']);
+      return { name: 'redmi-save.json', content: '{"items":{},"stats":{}}', size: 23 };
+    },
     exportSaveData: async (...args) => calls.push(['export', ...args]),
     createImportBackup: async data => calls.push(['backup', data]),
     loadImportBackup: async () => '{"mobile":true}',
@@ -19,10 +23,16 @@ test('Android 导出和备份优先调用移动 bridge', async () => {
     storage: {},
   });
 
+  assert.deepEqual(await platform.pickImportFile(), {
+    name: 'redmi-save.json',
+    content: '{"items":{},"stats":{}}',
+    size: 23,
+  });
   await platform.exportSaveData('{}', 'pokeidle-save.json');
   await platform.createImportBackup('{"backup":true}');
 
   assert.deepEqual(calls, [
+    ['import'],
     ['export', '{}', 'pokeidle-save.json'],
     ['backup', '{"backup":true}'],
   ]);
