@@ -12,6 +12,7 @@ import * as road from './road.js';
 import * as particles from './particles.js';
 import { settleBackgroundSlice } from './background-settlement.js';
 import { resolveBackgroundEncounter } from './background-battle.js';
+import { settleBackgroundItems } from './background-items.js';
 
 let _backgroundSettlementQueue = Promise.resolve();
 
@@ -38,6 +39,12 @@ export function settleBackgroundEncounters(now = Date.now()) {
       now,
       encounterEveryMs: intervalMs,
       random: Math.random,
+      resolveElapsed: ({ state: next, from, to }) => settleBackgroundItems({
+        state: next,
+        from,
+        to,
+        enabled: background.roadItemsEnabled === true,
+      }),
       resolveEncounter: ({ state: next, at }) => {
         const pokemon = pickRandomPokemon();
         return resolveBackgroundEncounter({

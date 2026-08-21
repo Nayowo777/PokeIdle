@@ -227,6 +227,13 @@ export function ensureGpsState() {
 
 const BACKGROUND_STATS = ['encounters', 'caught', 'fled', 'ballsUsed'];
 
+function normalizeBackgroundItemMap(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter(([, count]) =>
+    Number.isInteger(count) && count >= 0,
+  ));
+}
+
 export function normalizeBackgroundState(value, now = Date.now()) {
   const source = value && typeof value === 'object' ? value : {};
   const validTime = candidate => Number.isFinite(candidate) && candidate >= 0 ? candidate : 0;
@@ -236,8 +243,13 @@ export function normalizeBackgroundState(value, now = Date.now()) {
     key,
     Number.isInteger(statsSource[key]) && statsSource[key] >= 0 ? statsSource[key] : 0,
   ]));
+  stats.items = normalizeBackgroundItemMap(statsSource.items);
+  stats.itemDrops = Number.isInteger(statsSource.itemDrops) && statsSource.itemDrops >= 0
+    ? statsSource.itemDrops
+    : 0;
   const normalized = {
     enabled: source.enabled === true,
+    roadItemsEnabled: source.roadItemsEnabled === true,
     startedAt: validTime(source.startedAt),
     settledAt: validTime(source.settledAt) || normalizedNow,
     encounterRemainderMs: validTime(source.encounterRemainderMs),

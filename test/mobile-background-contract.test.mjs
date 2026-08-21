@@ -60,6 +60,19 @@ test('移动端 bridge 暴露后台模式并绑定前后台生命周期', async 
   assert.match(bridge, /__POKEIDLE_BACKGROUND_STOPPED__/);
 });
 
+test('进入后台时记录普通道路道具快照并排除非步行状态', async () => {
+  const main = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
+
+  assert.match(main, /background\.roadItemsEnabled\s*=/);
+  assert.match(main, /phase\s*===\s*['"]idle['"]/);
+  assert.match(main, /!road\.isBike\(\)/);
+  assert.match(main, /!_fishing/);
+  assert.match(main, /!isFishingPending\(\)/);
+  assert.match(main, /!inMassZone\(\)/);
+  assert.match(main, /!inTwistZone\(\)/);
+  assert.match(main, /!road\.isTransitioning\(\)/);
+});
+
 test('Android 前台服务和插件声明启动、停止、心跳与通知权限契约', async () => {
   const plugin = await readFile(new URL('../android/app/src/main/java/com/pokemon/idle/PokeIdleBackgroundPlugin.java', import.meta.url), 'utf8');
   const service = await readFile(new URL('../android/app/src/main/java/com/pokemon/idle/PokeIdleBackgroundService.java', import.meta.url), 'utf8');

@@ -1348,6 +1348,13 @@ async function init() {
     gameData.background.startedAt = now;
     gameData.background.settledAt = now;
     gameData.background.encounterRemainderMs = 0;
+    gameData.background.roadItemsEnabled = phase === 'idle'
+      && !road.isBike()
+      && !_fishing
+      && !isFishingPending()
+      && !inMassZone()
+      && !inTwistZone()
+      && !road.isTransitioning();
     await saveGame();
     return true;
   };

@@ -262,10 +262,11 @@ test('后台存档字段归一化会拒绝非法时间、余数和统计值', ()
     pendingEncounter: { index: '0025' },
   }, 10_000), {
     enabled: true,
+    roadItemsEnabled: false,
     startedAt: 0,
     settledAt: 10_000,
     encounterRemainderMs: 0,
-    stats: { encounters: 0, caught: 0, fled: 0, ballsUsed: 0 },
+    stats: { encounters: 0, caught: 0, fled: 0, ballsUsed: 0, items: {}, itemDrops: 0 },
     lastResult: null,
     pendingEncounter: { index: '0025' },
   });
@@ -281,4 +282,21 @@ test('后台结算入口不依赖战斗动画或页面渲染', async () => {
   assert.match(main, /__POKEIDLE_BACKGROUND_TICK__/);
   assert.match(main, /__POKEIDLE_BACKGROUND_RESUME__/);
   assert.match(main, /delete gameData\.background\.pendingEncounter;[\s\S]{0,160}await saveGame\(\{ strict: true \}\)/);
+});
+
+test('后台状态兼容普通道路快照和道具统计', () => {
+  const state = normalizeBackgroundState({
+    roadItemsEnabled: true,
+    stats: { items: { candy: 3 }, itemDrops: 2 },
+  }, 1_000);
+
+  assert.equal(state.roadItemsEnabled, true);
+  assert.deepEqual(state.stats.items, { candy: 3 });
+  assert.equal(state.stats.itemDrops, 2);
+});
+
+test('后台时间片源码先结算道路道具再处理遇敌', async () => {
+  const battle = await readFile(new URL('../src/battle.js', import.meta.url), 'utf8');
+  assert.match(battle, /settleBackgroundItems/);
+  assert.match(battle, /resolveElapsed:[\s\S]*settleBackgroundItems[\s\S]*resolveEncounter/);
 });
