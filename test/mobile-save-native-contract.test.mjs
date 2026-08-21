@@ -15,6 +15,22 @@ test('Android bridge 使用 PokeIdleSave 原生插件处理全部存档 I/O', as
   assert.doesNotMatch(bridgeSource, /Filesystem\.(readFile|writeFile|getUri|deleteFile)/);
 });
 
+test('Android 原生存档插件使用 SAF 和私有目录原子写入', async () => {
+  const plugin = await readFile(new URL('../android/app/src/main/java/com/pokemon/idle/PokeIdleSavePlugin.java', import.meta.url), 'utf8');
+  const activity = await readFile(new URL('../android/app/src/main/java/com/pokemon/idle/MainActivity.java', import.meta.url), 'utf8');
+
+  assert.match(plugin, /@CapacitorPlugin\(name = "PokeIdleSave"\)/);
+  assert.match(plugin, /Intent\.ACTION_OPEN_DOCUMENT/);
+  assert.match(plugin, /Intent\.ACTION_CREATE_DOCUMENT/);
+  assert.match(plugin, /SAVE_MAX_BYTES\s*=\s*20L\s*\*\s*1024L\s*\*\s*1024L/);
+  assert.match(plugin, /getFilesDir\(\)/);
+  assert.match(plugin, /save\.json\.tmp/);
+  assert.match(plugin, /save\.json\.bak/);
+  assert.match(plugin, /SAVE_TOO_LARGE/);
+  assert.match(plugin, /@ActivityCallback/);
+  assert.match(activity, /registerPlugin\(PokeIdleSavePlugin\.class\)/);
+});
+
 test('Android manifest 不申请公共存储权限', async () => {
   const manifest = await readFile(new URL('../android/app/src/main/AndroidManifest.xml', import.meta.url), 'utf8');
 
