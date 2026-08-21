@@ -53,6 +53,9 @@ export function formatSaveTransferError(error) {
   if (code.includes('INVALID_JSON')) return '文件不是有效的 JSON 存档';
   if (code.includes('MISSING_FIELDS')) return '存档缺少必要字段';
   if (code.includes('INVALID_VERSION')) return '存档格式版本无效';
+  if (code.includes('INVALID_FILE_URI')) return '无法读取所选存档文件';
+  if (code.includes('IMPORT_READ_FAILED')) return '存档读取失败，请重新选择文件';
+  if (code.includes('EXPORT_WRITE_FAILED')) return '存档导出失败，请更换保存位置';
   if (code.includes('backup') || code.includes('IMPORT_BACKUP_FAILED')) return '导入前备份失败，当前存档未改变';
   if (code.includes('SAVE_WRITE_FAILED')) return '存档写入失败，已尝试恢复当前存档';
   if (code.includes('AggregateError') || error instanceof AggregateError) return '存档写入失败，已尝试恢复当前存档';
@@ -164,6 +167,7 @@ export function createSaveTransferController({
   persist,
   confirm = async () => true,
   showMessage = () => {},
+  showProgress = () => {},
   addLog = () => {},
   reload = () => {},
   now = () => Date.now(),
@@ -178,6 +182,7 @@ export function createSaveTransferController({
       const current = getCurrent();
       const appVersion = await platform.getAppVersion();
       const output = serializeSaveForExport(current, { appVersion, now: now() });
+      showProgress('请选择存档保存位置');
       const result = await platform.exportSaveData(output.json, output.fileName);
       if (result == null) return null;
       addLog('export', { fileName: output.fileName, result });
@@ -193,11 +198,13 @@ export function createSaveTransferController({
     let file;
     let persistenceWarnings = [];
     try {
+      showProgress('正在读取存档');
       file = await platform.pickImportFile();
       if (!file) return null;
       const parsed = parseSaveTransfer(file.content);
       const current = getCurrent();
       if (!await confirm({ source: file.name, current, incoming: parsed.data, summary: parsed.summary })) return null;
+      showProgress('正在备份当前存档');
       const replacement = await replaceSaveWithBackup({
         getCurrent,
         incoming: parsed.data,
@@ -213,6 +220,7 @@ export function createSaveTransferController({
         apply,
         persist: async () => {
           try {
+            showProgress('正在写入新存档');
             const result = await persistReplacement();
             persistenceWarnings = result?.warnings || [];
             return result;

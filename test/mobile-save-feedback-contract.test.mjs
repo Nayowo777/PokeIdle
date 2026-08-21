@@ -9,6 +9,9 @@ test('设置页提供存档操作提示区域', () => {
   assert.match(source, /saveCurrent:\s*\(\)\s*=>\s*saveGame\(\{/);
   assert.match(source, /requiredSource:\s*requiredSaveSource/);
   assert.match(source, /typeof\s+mobileReload\s*===\s*['"]function['"]/);
+  assert.match(source, /showProgress:\s*showSaveTransferProgress/);
+  assert.match(source, /saveTransferStatus/);
+  assert.match(source, /classList\.add\(['"]show['"],\s*['"]busy['"]\)/);
   assert.doesNotMatch(source, /showMessage:\s*updateTextBox/);
 });
 

@@ -177,6 +177,46 @@ test('用户拒绝确认时不覆盖当前存档', async () => {
   assert.deepEqual(events, []);
 });
 
+test('导入成功依次报告读取、备份和写入阶段并刷新', async () => {
+  const progress = [];
+  let active = structuredClone(current);
+  let reloads = 0;
+  const controller = createSaveTransferController({
+    platform: { pickImportFile: async () => ({ name: 'save.json', content: JSON.stringify(incoming), size: 42 }) },
+    getCurrent: () => active,
+    confirm: async () => true,
+    saveCurrent: async () => {},
+    createBackup: async () => {},
+    apply: value => { active = value; },
+    persist: async () => {},
+    showProgress: message => progress.push(message),
+    reload: () => { reloads++; },
+  });
+
+  assert.ok(await controller.importSave());
+  assert.deepEqual(progress, ['正在读取存档', '正在备份当前存档', '正在写入新存档']);
+  assert.equal(reloads, 1);
+});
+
+test('导出先提示选择保存位置，用户取消不显示失败', async () => {
+  const progress = [];
+  const messages = [];
+  const controller = createSaveTransferController({
+    platform: {
+      getAppVersion: async () => '1.0.14',
+      exportSaveData: async () => null,
+    },
+    getCurrent: () => current,
+    saveGame: async () => {},
+    showProgress: message => progress.push(message),
+    showMessage: message => messages.push(message),
+  });
+
+  assert.equal(await controller.exportSave(), null);
+  assert.deepEqual(progress, ['请选择存档保存位置']);
+  assert.deepEqual(messages, []);
+});
+
 test('恢复导入存档的写入失败映射为稳定提示', async () => {
   const messages = [];
   const controller = createSaveTransferController({
@@ -199,4 +239,7 @@ test('存档错误映射为稳定的中文提示', () => {
   assert.equal(formatSaveTransferError({ code: 'SAVE_TOO_LARGE' }), '存档文件不能超过 20 MB');
   assert.equal(formatSaveTransferError({ code: 'IMPORT_BACKUP_FAILED' }), '导入前备份失败，当前存档未改变');
   assert.equal(formatSaveTransferError({ code: 'SAVE_WRITE_FAILED' }), '存档写入失败，已尝试恢复当前存档');
+  assert.equal(formatSaveTransferError({ code: 'IMPORT_READ_FAILED' }), '存档读取失败，请重新选择文件');
+  assert.equal(formatSaveTransferError({ code: 'INVALID_FILE_URI' }), '无法读取所选存档文件');
+  assert.equal(formatSaveTransferError({ code: 'EXPORT_WRITE_FAILED' }), '存档导出失败，请更换保存位置');
 });

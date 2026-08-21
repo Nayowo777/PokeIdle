@@ -1176,6 +1176,13 @@ export function renderSettings(container, s) {
     status.classList.add('show', /成功|已恢复|已导出/.test(message) ? 'success' : 'error');
     updateTextBox(message);
   };
+  const showSaveTransferProgress = message => {
+    const status = container.querySelector('#saveTransferStatus');
+    if (!status) return;
+    status.textContent = message;
+    status.classList.remove('success', 'error');
+    status.classList.add('show', 'busy');
+  };
   // 刷新游戏：先完成保存，再重载当前页面。
   container.querySelector('#reloadGameBtn')?.addEventListener('click', async () => {
     await saveGame();
@@ -1193,6 +1200,7 @@ export function renderSettings(container, s) {
     persist: persistImportedSave,
     confirm: details => showSaveTransferDialog(document, details),
     showMessage: showSaveTransferMessage,
+    showProgress: showSaveTransferProgress,
     addLog: addSystemLog,
     reload: () => setTimeout(reloadGame, 800),
   });
