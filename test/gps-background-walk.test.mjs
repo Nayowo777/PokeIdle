@@ -18,3 +18,15 @@ test('GPS 纯数据推进可跨越多个路线段并停止在普通目的地', (
   assert.equal(result.state.path, null);
   assert.equal(result.consumed, 200);
 });
+
+test('GPS 纯数据推进到漫游节点后可继续消费下一段路程', () => {
+  const gps = { curIdx: 2, destIdx: 1, path: [2, 1], seg: 0, totalPx: 100, remainPx: 100, units: 1, roamEnabled: true, massTarget: null, massArrived: false };
+  const result = advanceGpsDistance(150, gps, {
+    segmentLength: () => 100,
+    nextRoute: arrived => ({ curIdx: arrived, destIdx: 3, path: [arrived, 3], seg: 0, totalPx: 100, remainPx: 100, units: 1 }),
+  });
+  assert.equal(result.consumed, 150);
+  assert.equal(result.state.curIdx, 1);
+  assert.equal(result.state.destIdx, 3);
+  assert.equal(result.state.remainPx, 50);
+});

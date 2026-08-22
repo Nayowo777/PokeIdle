@@ -17,7 +17,7 @@ import { commitBackgroundState } from './background-transaction.js';
 import { settleBackgroundWalk } from './background-walk.js';
 import { advanceGpsDistance } from './gps-distance.js';
 import { settleIncubatorProgress } from './incubator-progress.js';
-import { getGpsSegmentPx } from './gps.js';
+import { continueGpsRoam, getGpsSegmentPx } from './gps.js';
 
 let _backgroundSettlementQueue = Promise.resolve();
 
@@ -56,6 +56,7 @@ export function settleBackgroundEncounters(now = Date.now()) {
           if (walk.distance > 0) {
             const gps = advanceGpsDistance(walk.distance, walk.state.gameData.gps, {
               segmentLength: getGpsSegmentPx,
+              nextRoute: continueGpsRoam,
             });
             walk.state.gameData.gps = gps.state;
             const hatch = settleIncubatorProgress(walk.state.gameData, {

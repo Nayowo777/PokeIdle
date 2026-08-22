@@ -14,7 +14,7 @@ function validDistance(value) {
  * 消费一段纯数据路程，不触发地图渲染或道路状态副作用。
  * segmentLength 可按相邻节点返回下一段长度；未提供时沿用当前 totalPx。
  */
-export function advanceGpsDistance(distance, gpsState, { segmentLength } = {}) {
+export function advanceGpsDistance(distance, gpsState, { segmentLength, nextRoute } = {}) {
   const state = clone(gpsState || {});
   let remaining = validDistance(distance);
   let consumed = 0;
@@ -43,13 +43,21 @@ export function advanceGpsDistance(distance, gpsState, { segmentLength } = {}) {
         state.units = state.totalPx;
         continue;
       }
-      state.curIdx = arrived;
-      state.destIdx = null;
-      state.path = null;
-      state.seg = 0;
-      state.units = 0;
-      state.totalPx = 0;
-      state.remainPx = 0;
+      const continued = state.roamEnabled && typeof nextRoute === 'function'
+        ? nextRoute(arrived, state)
+        : null;
+      if (continued?.path?.length >= 2) {
+        Object.assign(state, clone(continued));
+        continue;
+      } else {
+        state.curIdx = arrived;
+        state.destIdx = null;
+        state.path = null;
+        state.seg = 0;
+        state.units = 0;
+        state.totalPx = 0;
+        state.remainPx = 0;
+      }
       break;
     }
     const used = Math.min(remaining, remainPx);

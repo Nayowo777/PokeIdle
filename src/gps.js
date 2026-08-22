@@ -356,6 +356,27 @@ function nextStop(curIdx) {
   if (i === -1) return (curIdx + 1) % REGION_CYCLE.length;
   return ROAM_ROUTE[(i + 1) % ROAM_ROUTE.length];
 }
+
+// 后台路程结算使用：到达漫游节点后规划下一段，但不渲染地图。
+export function continueGpsRoam(gpsState) {
+  const arrived = gpsState?.curIdx;
+  const target = nextStop(arrived);
+  const path = findPath(arrived, target);
+  if (!Array.isArray(path) || path.length < 2) return null;
+  const totalPx = getGpsSegmentPx(path[0], path[1]);
+  if (totalPx <= 0) return null;
+  return {
+    curIdx: path[0],
+    destIdx: target,
+    path,
+    seg: 0,
+    units: DIST_MATRIX[path[0]][path[1]],
+    totalPx,
+    remainPx: totalPx,
+    massTarget: null,
+    massArrived: false,
+  };
+}
 // 开启当前路段：总长 = 边距离 × 每单位像素（按真实移动像素推进）
 function newSegment() {
   const g = gameData.gps;
