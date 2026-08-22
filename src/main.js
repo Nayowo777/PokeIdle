@@ -1387,6 +1387,10 @@ async function init() {
       && !inMassZone()
       && !inTwistZone()
       && !road.isTransitioning();
+    gameData.background.walkingEnabled = gameData.background.roadItemsEnabled;
+    gameData.background.walkPxPerSecond = gameData.background.walkingEnabled
+      ? Math.max(0, road.getSpeed() * 60)
+      : 0;
     await saveGame();
     return true;
   };

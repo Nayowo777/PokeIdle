@@ -14,6 +14,10 @@ import { settleBackgroundSlice } from './background-settlement.js';
 import { resolveBackgroundEncounter } from './background-battle.js';
 import { settleBackgroundItems } from './background-items.js';
 import { commitBackgroundState } from './background-transaction.js';
+import { settleBackgroundWalk } from './background-walk.js';
+import { advanceGpsDistance } from './gps-distance.js';
+import { settleIncubatorProgress } from './incubator-progress.js';
+import { getGpsSegmentPx } from './gps.js';
 
 let _backgroundSettlementQueue = Promise.resolve();
 
@@ -26,6 +30,8 @@ export function settleBackgroundEncounters(now = Date.now()) {
     const state = {
       settledAt: background.settledAt || now,
       encounterRemainderMs: background.encounterRemainderMs || 0,
+      walkingEnabled: background.walkingEnabled === true,
+      walkPxPerSecond: background.walkPxPerSecond || 0,
       balls: {
         'poke-ball': original.items?.['poke-ball'] || 0,
         'ultra-ball': original.items?.['ultra-ball'] || 0,
@@ -41,11 +47,25 @@ export function settleBackgroundEncounters(now = Date.now()) {
       encounterEveryMs: intervalMs,
       random: Math.random,
       resolveElapsed: ({ state: next, from, to }) => settleBackgroundItems({
-        state: next,
-        from,
-        to,
-        enabled: background.roadItemsEnabled === true,
-        logTime: now,
+        ...(() => {
+          const walk = settleBackgroundWalk({
+            state: next,
+            from,
+            to,
+          });
+          if (walk.distance > 0) {
+            const gps = advanceGpsDistance(walk.distance, walk.state.gameData.gps, {
+              segmentLength: getGpsSegmentPx,
+            });
+            walk.state.gameData.gps = gps.state;
+            const hatch = settleIncubatorProgress(walk.state.gameData, {
+              walkDistance: walk.state.gameData.stats.walkDistance,
+              hatchMultiplier: 1,
+            });
+            walk.state.gameData = hatch.gameData;
+          }
+          return { state: walk.state, from, to, enabled: background.roadItemsEnabled === true, logTime: now };
+        })(),
       }),
       resolveEncounter: ({ state: next, at }) => {
         const pokemon = pickRandomPokemon();
@@ -70,7 +90,7 @@ export function settleBackgroundEncounters(now = Date.now()) {
     nextData.background ||= {};
     nextData.background.settledAt = settled.state.settledAt;
     nextData.background.encounterRemainderMs = settled.state.encounterRemainderMs || 0;
-    nextData.background.stats ||= { encounters: 0, caught: 0, fled: 0, ballsUsed: 0 };
+    nextData.background.stats ||= { encounters: 0, caught: 0, fled: 0, ballsUsed: 0, walkDistance: 0 };
     nextData.background.stats.encounters += settled.encounters;
     for (const result of settled.results) {
       if (result.result === 'caught') nextData.background.stats.caught += 1;

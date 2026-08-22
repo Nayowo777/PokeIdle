@@ -247,9 +247,14 @@ export function normalizeBackgroundState(value, now = Date.now()) {
   stats.itemDrops = Number.isInteger(statsSource.itemDrops) && statsSource.itemDrops >= 0
     ? statsSource.itemDrops
     : 0;
+  stats.walkDistance = Number.isFinite(statsSource.walkDistance) && statsSource.walkDistance >= 0
+    ? statsSource.walkDistance
+    : 0;
   const normalized = {
     enabled: source.enabled === true,
     roadItemsEnabled: source.roadItemsEnabled === true,
+    walkingEnabled: source.walkingEnabled === true,
+    walkPxPerSecond: validTime(source.walkPxPerSecond),
     startedAt: validTime(source.startedAt),
     settledAt: validTime(source.settledAt) || normalizedNow,
     encounterRemainderMs: validTime(source.encounterRemainderMs),

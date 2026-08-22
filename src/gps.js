@@ -32,6 +32,14 @@ const NO_EDGE = 999;     // 无直达边（可能经由其他地区绕行）
 // 1 单位对应的真实移动像素 = 走路速度(px/帧)×60帧/秒×60秒×10分钟
 const PX_PER_UNIT = ROAD_SPEED_WALK * 60 * 60 * MIN_PER_UNIT;
 
+// 后台纯数据结算使用的路段长度查询，不触碰地图或道路动画。
+export function getGpsSegmentPx(from, to) {
+  const units = DIST_MATRIX?.[from]?.[to];
+  return typeof units === 'number' && Number.isFinite(units) && units > 0 && units !== NO_EDGE
+    ? units * PX_PER_UNIT
+    : 0;
+}
+
 // 漫游路线：一条经过全部 9 个地区的固定路线（阿罗拉→丰缘→城都→关都→神奥→卡洛斯→伽勒尔→合众→帕底亚→阿罗拉…），
 // 按当前地图（MAP_POS/DIST_MATRIX）布局设计，环上相邻地区均有直达边（无 999 绕行/回走），走完一轮继续循环。
 const ROAM_ROUTE = [6, 2, 1, 0, 3, 5, 7, 4, 8];

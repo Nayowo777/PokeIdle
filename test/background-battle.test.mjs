@@ -263,10 +263,12 @@ test('后台存档字段归一化会拒绝非法时间、余数和统计值', ()
   }, 10_000), {
     enabled: true,
     roadItemsEnabled: false,
+    walkingEnabled: false,
+    walkPxPerSecond: 0,
     startedAt: 0,
     settledAt: 10_000,
     encounterRemainderMs: 0,
-    stats: { encounters: 0, caught: 0, fled: 0, ballsUsed: 0, items: {}, itemDrops: 0 },
+    stats: { encounters: 0, caught: 0, fled: 0, ballsUsed: 0, items: {}, itemDrops: 0, walkDistance: 0 },
     lastResult: null,
     pendingEncounter: { index: '0025' },
   });
