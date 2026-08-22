@@ -988,7 +988,7 @@ export function renderSettings(container, s) {
           </div>
         </div>
         <div class="background-mode-status ${backgroundEnabled ? 'on' : ''}">${backgroundStatus}</div>
-        <div class="background-mode-hint">通过常驻通知在锁屏或退到后台后继续自动遇敌与抓捕，运行期间会增加耗电。</div>
+        <div class="background-mode-hint">通过常驻通知在锁屏或退到后台后继续普通道路行走、导航、孵蛋、获得道具并自动遇敌抓捕，运行期间会增加耗电。</div>
       </div>
 
       <div class="settings-group">

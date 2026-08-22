@@ -9,6 +9,9 @@ test('设置页提供后台挂机开关、运行状态和平台提示', async ()
   assert.match(views, /id="toggleBackgroundMode"/);
   assert.match(views, /后台挂机/);
   assert.match(views, /常驻通知/);
+  assert.match(views, /导航/);
+  assert.match(views, /孵蛋/);
+  assert.match(views, /道具/);
   assert.match(views, /耗电/);
   assert.match(views, /当前平台不支持/);
   assert.match(views, /toggleBackgroundMode/);
