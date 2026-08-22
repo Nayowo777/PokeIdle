@@ -300,5 +300,8 @@ test('后台状态兼容普通道路快照和道具统计', () => {
 test('后台时间片源码先结算道路道具再处理遇敌', async () => {
   const battle = await readFile(new URL('../src/battle.js', import.meta.url), 'utf8');
   assert.match(battle, /settleBackgroundItems/);
+  assert.match(battle, /settleBackgroundWalk/);
+  assert.match(battle, /advanceGpsDistance/);
+  assert.match(battle, /settleIncubatorProgress/);
   assert.match(battle, /resolveElapsed:[\s\S]*settleBackgroundItems[\s\S]*resolveEncounter/);
 });
