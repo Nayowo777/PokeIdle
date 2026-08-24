@@ -10,7 +10,7 @@ import {
 } from './config.js';
 import { ensureBerryFarm } from './berry.js';
 import { removePokemonFromAllTeams, isInAnyTeam } from './team.js';
-import { BERRY_ICONS, BERRY_NAMES, TYPE_COLORS } from './items.js';
+import { BERRY_ICONS, BERRY_NAMES, TYPE_COLORS, pokemonSourceBadge } from './items.js';
 import { matchPinyinPartial } from './pokedex.js';
 import { setupSourceFilter, closeAllDropdowns, sourceFilterLabel } from './filters.js';
 
@@ -980,7 +980,9 @@ function pickPickRows() {
       const poke = getPokemonByIndex(String(p.species));
       if (!poke) return true;
       const upper = q.toUpperCase();
-      return poke.name.includes(q) ||
+      return String(p.species).includes(q) ||   // 图鉴编号直接匹配
+        poke.name.includes(q) ||
+        (poke.form || '').includes(q) ||
         (poke.pinyin || '').toUpperCase().includes(upper) ||
         (poke.pinyinInitials || '').toUpperCase().includes(upper) ||
         matchPinyinPartial(q, poke.pinyin) ||
@@ -1019,7 +1021,7 @@ function pickRowHtml(p) {
   return `
   <div class="pokedex-entry roster-row bounty-trade-row" data-pick-view="${p.id}">
     <span class="roster-icon">${icon}</span>
-    <span class="pokedex-star">${p.shiny ? '★' : ''}</span>
+    <span class="pokedex-star">${pokemonSourceBadge(p)}</span>
     <span class="pokedex-name">${name}</span>
     <span class="roster-lv-col">${genderBadge(ensureGender(p))}Lv${p.level || 1}</span>
     <span class="roster-iv" data-tip="${pickIvTip(p)}">${pickIvSum(p)}</span>

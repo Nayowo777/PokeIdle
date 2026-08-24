@@ -11,12 +11,24 @@ import * as particles from './particles.js';
 
 // 宝可梦属性显示颜色（图鉴/战斗页类型标签用）
 export const TYPE_COLORS = {
-  '一般': '#B5B4AF', '格斗': '#BE4D47', '飞行': '#81b9ef', '毒': '#8943B0',
-  '地面': '#9C5A59', '岩石': '#D3A865', '虫': '#9CAE1E', '幽灵': '#704170',
-  '钢': '#60a1b8', '火': '#E75357', '水': '#3F98EA', '草': '#3fa129',
-  '电': '#F9CE40', '超能': '#F8669C', '冰': '#3fd8ff', '龙': '#5060e1',
-  '恶': '#61484B', '妖精': '#E259E7',
+  '一般': '#9F9E9A', '格斗': '#A7443E', '飞行': '#72A3D2', '毒': '#793B9B',
+  '地面': '#894F4E', '岩石': '#BA9459', '虫': '#89991A', '幽灵': '#633963',
+  '钢': '#548EA2', '火': '#CB494D', '水': '#3786CE', '草': '#378E24',
+  '电': '#DBB538', '超能': '#DA5A89', '冰': '#37BEE0', '龙': '#4654C6',
+  '恶': '#553F42', '妖精': '#C74ECB',
 };
+
+// 列表行来源徽章（仓库 / 放入 / 交换等列表共用，与 roster 一致）：
+// 普通闪光 → ★；时空扭曲 RGB/污染 → ○；扭曲闪光 → ★○
+export const POKE_BADGE_STAR = '<svg class="pokedex-star-svg" viewBox="2 2 20.2 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6.77272 14.5899L5.24822 20.9745C5.1866 21.2304 5.28549 21.498 5.49671 21.6536C5.70873 21.8087 5.99207 21.8238 6.21922 21.6891L11.9527 18.2844L17.6835 21.6891C17.787 21.7505 17.9027 21.7812 18.0178 21.7812C18.1547 21.7812 18.2907 21.7387 18.406 21.6543C18.6173 21.4985 18.7162 21.231 18.6545 20.9752L17.13 14.5905L22.1907 10.3017C22.3931 10.131 22.4721 9.85483 22.3911 9.60288C22.3106 9.35093 22.0855 9.17223 21.8217 9.15074L15.1466 8.59969L12.5534 2.54696C12.4506 2.30605 12.2138 2.15039 11.952 2.15039C11.6902 2.15039 11.4534 2.30605 11.3507 2.54696L8.7555 8.59969L2.08241 9.14997C1.81862 9.17165 1.59348 9.35026 1.51299 9.60226C1.43185 9.85421 1.51107 10.1304 1.7133 10.301L6.77272 14.5899Z" fill="currentColor"></path></svg>';
+export const POKE_BADGE_TWIST = '<svg class="pokedex-star-svg" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M512 0c282.7776 0 512 229.2224 512 512s-229.2224 512-512 512S0 794.7776 0 512 229.2224 0 512 0z m0 947.2c240.3584 0 435.2-194.8416 435.2-435.2S752.3584 76.8 512 76.8v870.4z" fill="currentColor"></path></svg>';
+export const POKE_BADGE_TWIST_SHINY = '<svg class="pokedex-star-svg" viewBox="1.9 2 20.2 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21.3357 8.67501L15.3966 8.23626L13.1615 2.76251C13.076 2.53826 12.9196 2.3446 12.7136 2.2081C12.5076 2.07159 12.2623 1.99891 12.0111 2.00001C11.7577 2.00048 11.5104 2.0735 11.3014 2.20953C11.0924 2.34556 10.9315 2.53828 10.8396 2.76251L8.60456 8.23626L2.66547 8.67626C1.53478 8.78751 1.09119 10.1625 1.94941 10.8775L6.47744 14.7038L5.0677 20.4538C5.03842 20.5699 5.02689 20.6895 5.03347 20.8088C5.03479 20.8438 5.04137 20.8775 5.04532 20.9125C5.05585 20.9925 5.07165 21.0688 5.09666 21.1438C5.1085 21.1775 5.11903 21.2113 5.13351 21.2438C5.16721 21.3212 5.20957 21.3949 5.25988 21.4638C5.27304 21.4825 5.28357 21.5038 5.29805 21.5225C5.36518 21.6063 5.44284 21.68 5.5284 21.7437C5.54946 21.76 5.57315 21.7712 5.59553 21.7862C5.69221 21.8497 5.79762 21.9001 5.90881 21.9363C5.98366 21.9596 6.06085 21.9755 6.13916 21.9837C6.17075 21.9875 6.20234 21.9937 6.23393 21.995C6.24841 21.995 6.26157 22 6.27605 22C6.34055 22 6.40636 21.9825 6.47218 21.9725C6.51166 21.9663 6.55115 21.9663 6.59064 21.9563C6.71572 21.9228 6.83468 21.8713 6.94341 21.8037L11.9993 18.6925L12.0098 18.6988L17.0551 21.8025C17.2464 21.923 17.4706 21.9877 17.7001 21.9888C18.4504 21.9888 19.1256 21.2875 18.9308 20.4525L17.5211 14.7025L22.0518 10.8775C22.9073 10.1613 22.4664 8.75876 21.3357 8.67501ZM21.1791 9.94251L16.6484 13.7675C16.4714 13.9168 16.34 14.1087 16.2682 14.323C16.1964 14.5373 16.1868 14.766 16.2403 14.985L17.6922 20.7038L12.7153 17.6425C12.505 17.5134 12.2602 17.444 12.0098 17.4425V3.40376L14.1685 8.68876C14.2579 8.90857 14.4111 9.0998 14.6103 9.24029C14.8095 9.38078 15.0465 9.46477 15.2939 9.48251L21.1909 9.91876C21.1856 9.92126 21.1804 9.92876 21.1791 9.94251Z" fill="currentColor"></path></svg>';
+// 按闪光 / 时空扭曲变体返回对应徽章 SVG（非闪非扭曲 → 空字符串）
+export function pokemonSourceBadge(p) {
+  return p.shiny
+    ? (p.variant === 'rgb' || p.variant === 'polluted') ? POKE_BADGE_TWIST_SHINY : POKE_BADGE_STAR
+    : (p.variant === 'rgb' || p.variant === 'polluted') ? POKE_BADGE_TWIST : '';
+}
 
 // 道具图标文件名（位于 src/items/ 目录）
 export const ITEM_ICONS = {
@@ -191,7 +203,7 @@ export function findBerryTarget(recipe) {
 let _dropStatusTimer = null;
 
 // 掉落糖果的数量倍率：按 CANDY_DROP_MULT 权重抽一次（掉落发生时即确定）
-function rollCandyMult() {
+export function rollCandyMult() {
   const total = CANDY_DROP_MULT.reduce((s, c) => s + c.weight, 0);
   let r = Math.random() * total;
   for (const c of CANDY_DROP_MULT) {
@@ -239,21 +251,25 @@ export function cancelItemDrop() {
   return true;
 }
 
+// 生成道路掉落实体并播放滚动/拾取动画。返回是否真正生成（false 表示本次未生成，
+// 由调用方把累积值保留，避免道具丢失）；后台（非主界面）直接入账也算成功。
 export function spawnItemDrop(itemKey) {
-  if (phase !== 'idle') return;
+  if (phase !== 'idle') return false;
   // 掉落糖果时先确定本次数量倍率（×1/×2/×5/×50/×100）
   const qty = itemKey === 'candy' ? rollCandyMult() : 1;
   const screen = $('screen');
   const charEl = $('walkGif');
-  if (!screen || !charEl) return;
+  if (!screen || !charEl) return false;
 
-  // 不在主界面（在其他页面挂机中）：后台直接模拟拾取入库，不播放滚动/拾取动画
-  if ($('idleView')?.style.display === 'none') {
+  // 不在主界面（在其他页面挂机中）或页面本身不可见（浏览器/WebView 切走或最小化）：
+  // 后台直接模拟拾取入库，不播放滚动/拾取动画，避免恢复前台后逐一出补发动画
+  if (document.hidden || $('idleView')?.style.display === 'none') {
     grantItem(itemKey, qty);
-    return;
+    saveGame(); // 后台入账立即存档，避免依赖 30 秒周期存档导致刷新丢日志/丢道具
+    return true;
   }
 
-  if (_itemDropActive) return;
+  if (_itemDropActive) return false;
 
   setItemDropActive(true);
 
@@ -273,6 +289,8 @@ export function spawnItemDrop(itemKey) {
     if (phase === 'idle') { setIdleCharacter('walk'); road.resume(); }
   };
 
+  // 动画受理成功：后续由 frame/fly 驱动滚动与拾取入账，这里返回 true 让调用方扣减累积值。
+  // 坐标统一换算为未受移动端 transform 缩放影响的逻辑坐标。
   const layout = getScreenLayoutMetrics();
   const cRect = layout?.rect(charEl);
   const roadEl = document.querySelector('.road-layer');
@@ -282,7 +300,7 @@ export function spawnItemDrop(itemKey) {
     _dropCancelCb = null;
     el.remove();
     setItemDropActive(false);
-    return;
+    return false;
   }
   const charLeft = cRect.left;
 
@@ -373,6 +391,7 @@ export function spawnItemDrop(itemKey) {
           setItemDropActive(false);
           if (phase === 'idle') { setIdleCharacter('walk'); road.resume(); }
           grantItem(itemKey, qty);
+          saveGame(); // 拾取入账立即存档，避免刷新时丢失最新掉落日志/道具
           showIdlePickup(ITEM_NAMES[itemKey], road.getPlace());
         }
       })(performance.now());
@@ -384,6 +403,7 @@ export function spawnItemDrop(itemKey) {
 
   setIdleCharacter('walk');
   requestAnimationFrame(frame);
+  return true;
 }
 
 // ---------- 放入孵蛋器 ----------

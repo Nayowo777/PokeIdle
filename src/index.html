@@ -3,9 +3,10 @@
 
 <head>
   <meta charset="UTF-8" />
+  <link rel="icon" type="image/png" href="favicon.png" />
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="battle-fx.css" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>口袋挂机</title>
   <script type="module" src="./main.js" defer></script>
 </head>
@@ -630,6 +631,8 @@
           <!-- 宝可梦仓库 -->
           <div id="rosterView" class="view-fixed view-list" style="display:none;position:relative;">
             <div class="pokedex-progress" id="rosterProgress"></div>
+            <button id="rosterSelectAll" style="display:none;">全选</button>
+            <div id="rosterAdvBar" style="display:none;"></div>
             <div class="pokedex-search">
               <div class="pokedex-search-row">
                 <div class="pokedex-search-input-wrap">
@@ -717,7 +720,7 @@
               <div class="goodbye-box-text"></div>
               <div class="goodbye-box-arrow" data-goodbye-arrow style="display:none;">
                 <svg viewBox="0 0 12 8" width="14" height="10">
-                  <path d="M1,2 L11,2 L6,8 Z" fill="#306230" />
+                  <path d="M1,2 L11,2 L6,8 Z" fill="var(--ui-color)" />
                 </svg>
               </div>
               <div class="goodbye-box-btns">
@@ -766,7 +769,7 @@
           <div id="textBoxContent" class="text-box-content"></div>
           <div id="textBoxArrow" class="text-box-arrow" style="display:none;">
             <svg viewBox="0 0 12 8" width="14" height="10">
-              <path d="M1,2 L11,2 L6,8 Z" fill="#306230" />
+              <path d="M1,2 L11,2 L6,8 Z" fill="var(--ui-color)" />
             </svg>
           </div>
           <div id="catchConfirmBtns" class="catch-confirm-btns" style="display:none;">

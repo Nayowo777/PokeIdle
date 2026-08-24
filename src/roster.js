@@ -1,11 +1,11 @@
 // ===== 宝可梦仓库 =====
 // 查看当前拥有的每只宝可梦个体（个体值/闪光/来源/在仓状态），
 // 交互与图鉴对齐：搜索 / 来源筛选 / 表头排序 / 点击进入个体详情，详情页可返回列表。
-import { $, showView, tryLoadImage, tryLoadPokemonImage, showConfirmBar, hideConfirmBar, updateBackpack } from './ui.js';
-import { gameData, getPokemonByIndex, getNature, pushNav, resetNav, saveGame, addSystemLog, setPokedexInLogView, ensureGender, genderBadge, isPokemon, phase } from './state.js';
-import { TYPE_COLORS } from './items.js';
+import { $, showView, tryLoadImage, tryLoadPokemonImage, showConfirmBar, hideConfirmBar, updateBackpack, logicViewport } from './ui.js';
+import { gameData, allPokemon, getPokemonByIndex, getNature, pushNav, resetNav, saveGame, addSystemLog, setPokedexInLogView, ensureGender, genderBadge, isPokemon, phase } from './state.js';
+import { TYPE_COLORS, pokemonSourceBadge } from './items.js';
 import { matchPinyinPartial, describeLogEntry } from './pokedex.js';
-import { REGION_CYCLE, EXP_CANDY_XP, RELEASE_XP_RATE } from './config.js';
+import { REGION_CYCLE, EXP_CANDY_XP, RELEASE_XP_RATE, MAX_LEVEL } from './config.js';
 import { showGoodbyeConfirm, startShinySparkleOn, stopShinySparkleLoop } from './animation.js';
 import { chooseMoves, fallbackMoves } from './moves.js';
 import { NATURES } from './battle-core.js';
@@ -25,9 +25,6 @@ function memberStatusTags(p) {
   if (!tags.length) return '';
   return tags.map(t => `<span class="roster-status-tag">${t}</span>`).join('');
 }
-const TWIST_ICON = '<svg class="pokedex-star-svg" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M512 0c282.7776 0 512 229.2224 512 512s-229.2224 512-512 512S0 794.7776 0 512 229.2224 0 512 0z m0 947.2c240.3584 0 435.2-194.8416 435.2-435.2S752.3584 76.8 512 76.8v870.4z" fill="currentColor"></path></svg>';
-const STAR_FILLED = '<svg class="pokedex-star-svg" viewBox="2 2 20.2 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6.77272 14.5899L5.24822 20.9745C5.1866 21.2304 5.28549 21.498 5.49671 21.6536C5.70873 21.8087 5.99207 21.8238 6.21922 21.6891L11.9527 18.2844L17.6835 21.6891C17.787 21.7505 17.9027 21.7812 18.0178 21.7812C18.1547 21.7812 18.2907 21.7387 18.406 21.6543C18.6173 21.4985 18.7162 21.231 18.6545 20.9752L17.13 14.5905L22.1907 10.3017C22.3931 10.131 22.4721 9.85483 22.3911 9.60288C22.3106 9.35093 22.0855 9.17223 21.8217 9.15074L15.1466 8.59969L12.5534 2.54696C12.4506 2.30605 12.2138 2.15039 11.952 2.15039C11.6902 2.15039 11.4534 2.30605 11.3507 2.54696L8.7555 8.59969L2.08241 9.14997C1.81862 9.17165 1.59348 9.35026 1.51299 9.60226C1.43185 9.85421 1.51107 10.1304 1.7133 10.301L6.77272 14.5899Z" fill="currentColor"></path></svg>';
-const TWIST_SHINY = '<svg class="pokedex-star-svg" viewBox="1.9 2 20.2 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21.3357 8.67501L15.3966 8.23626L13.1615 2.76251C13.076 2.53826 12.9196 2.3446 12.7136 2.2081C12.5076 2.07159 12.2623 1.99891 12.0111 2.00001C11.7577 2.00048 11.5104 2.0735 11.3014 2.20953C11.0924 2.34556 10.9315 2.53828 10.8396 2.76251L8.60456 8.23626L2.66547 8.67626C1.53478 8.78751 1.09119 10.1625 1.94941 10.8775L6.47744 14.7038L5.0677 20.4538C5.03842 20.5699 5.02689 20.6895 5.03347 20.8088C5.03479 20.8438 5.04137 20.8775 5.04532 20.9125C5.05585 20.9925 5.07165 21.0688 5.09666 21.1438C5.1085 21.1775 5.11903 21.2113 5.13351 21.2438C5.16721 21.3212 5.20957 21.3949 5.25988 21.4638C5.27304 21.4825 5.28357 21.5038 5.29805 21.5225C5.36518 21.6063 5.44284 21.68 5.5284 21.7437C5.54946 21.76 5.57315 21.7712 5.59553 21.7862C5.69221 21.8497 5.79762 21.9001 5.90881 21.9363C5.98366 21.9596 6.06085 21.9755 6.13916 21.9837C6.17075 21.9875 6.20234 21.9937 6.23393 21.995C6.24841 21.995 6.26157 22 6.27605 22C6.34055 22 6.40636 21.9825 6.47218 21.9725C6.51166 21.9663 6.55115 21.9663 6.59064 21.9563C6.71572 21.9228 6.83468 21.8713 6.94341 21.8037L11.9993 18.6925L12.0098 18.6988L17.0551 21.8025C17.2464 21.923 17.4706 21.9877 17.7001 21.9888C18.4504 21.9888 19.1256 21.2875 18.9308 20.4525L17.5211 14.7025L22.0518 10.8775C22.9073 10.1613 22.4664 8.75876 21.3357 8.67501ZM21.1791 9.94251L16.6484 13.7675C16.4714 13.9168 16.34 14.1087 16.2682 14.323C16.1964 14.5373 16.1868 14.766 16.2403 14.985L17.6922 20.7038L12.7153 17.6425C12.505 17.5134 12.2602 17.444 12.0098 17.4425V3.40376L14.1685 8.68876C14.2579 8.90857 14.4111 9.0998 14.6103 9.24029C14.8095 9.38078 15.0465 9.46477 15.2939 9.48251L21.1909 9.91876C21.1856 9.92126 21.1804 9.92876 21.1791 9.94251Z" fill="currentColor"></path></svg>';
 // 六围个体值明细（键 → 显示名）
 const IV_KEYS = [['hp', 'HP'], ['atk', '攻击'], ['def', '防御'], ['spa', '特攻'], ['spd', '特防'], ['spe', '速度']];
 
@@ -64,7 +61,7 @@ function ivHexagon(p) {
   }).join(' ');
   const axes = IV_KEYS.map((_, i) => {
     const [x, y] = pt(i, 1);
-    return `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(48,98,48,0.15)" stroke-width="0.5"/>`;
+    return `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(var(--ui-color-rgb),0.15)" stroke-width="0.5"/>`;
   }).join('');
   const labels = IV_KEYS.map(([, label], i) => {
     const [x, y] = pt(i, 1.32);
@@ -76,11 +73,11 @@ function ivHexagon(p) {
     return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.7" fill="var(--ui-color)"/>`;
   }).join('');
   return `<svg viewBox="0 0 100 100" class="roster-hex">
-    <polygon points="${poly(0.34)}" fill="none" stroke="rgba(48,98,48,0.18)" stroke-width="0.5"/>
-    <polygon points="${poly(0.67)}" fill="none" stroke="rgba(48,98,48,0.18)" stroke-width="0.5"/>
-    <polygon points="${poly(1)}" fill="none" stroke="rgba(48,98,48,0.18)" stroke-width="0.5"/>
+    <polygon points="${poly(0.34)}" fill="none" stroke="rgba(var(--ui-color-rgb),0.18)" stroke-width="0.5"/>
+    <polygon points="${poly(0.67)}" fill="none" stroke="rgba(var(--ui-color-rgb),0.18)" stroke-width="0.5"/>
+    <polygon points="${poly(1)}" fill="none" stroke="rgba(var(--ui-color-rgb),0.18)" stroke-width="0.5"/>
     ${axes}
-    <polygon points="${data}" fill="rgba(48,98,48,0.22)" stroke="var(--ui-color)" stroke-width="1.2"/>
+    <polygon points="${data}" fill="rgba(var(--ui-color-rgb),0.22)" stroke="var(--ui-color)" stroke-width="1.2"/>
     ${dots}
     ${labels}
   </svg>`;
@@ -94,6 +91,7 @@ let _shinyFilter = '';  // 闪光：''=不限 | normal(非闪光) | shiny(闪光
 let _variantFilter = ''; // 外观变体（时空扭曲）：''=不限 | any(全部变体) | rgb | polluted
 let _typeFilter = '';  // 属性筛选（''=全部）
 let _regionFilter = ''; // 地区筛选（''=全部）
+let _advFilter = null;  // 高级筛选配置（null=未启用）：{ poke, q, src, legend, shiny, variant, type, region, lvMin, lvMax, ivMin, ivMax, gender }
 let _detailId = null;  // 当前详情个体 id（非空=处于详情页）
 let _detailFromView = null; // 详情跳转来源（捕获/孵蛋后“查看详情”进入时记录，返回列表后再返回时优先回来源）
 let _detailReturnFn = null; // 从悬赏提交/交换选择列表进入详情时注册的返回回调（返回时恢复来源列表）
@@ -133,48 +131,81 @@ function matchesQuery(p, q) {
   const poke = getPokemonByIndex(String(p.species));
   if (!poke) return true;
   const upper = q.toUpperCase();
-  return poke.name.includes(q) ||
+  return String(p.species).includes(q) ||   // 图鉴编号（含变体后缀）直接匹配
+    poke.name.includes(q) ||
+    (poke.form || '').includes(q) ||   // 形态全名（如「超级基格尔德」）也能直接搜到
     poke.pinyin.toUpperCase().includes(upper) ||
     poke.pinyinInitials.toUpperCase().includes(upper) ||
     matchPinyinPartial(q, poke.pinyin) ||
     (p.nickname && p.nickname.includes(q));  // 中文昵称匹配，拼音不参与
 }
 
-// 过滤 + 排序 + 渲染列表
-function renderList() {
-  const list = $('rosterList');
-  if (!list) return;
-  const q = ($('rosterSearchInput')?.value || '').trim();
+// 当前筛选后的个体池：普通工具筛选 或 高级筛选二选一（批量全选共用同一逻辑）
+function currentFilterPool() {
   let pool = inRoster();
-  // 筛选：来源 → 普通/神兽 → 普通/闪光 →（时空扭曲）变体（四级）
-  // 大量出没（mass）归入「野生」（normal）筛选；时空扭曲（twist）单列来源
-  if (_srcFilter) pool = pool.filter(p => _srcFilter === 'normal' ? (p.source === 'normal' || p.source === 'mass') : p.source === _srcFilter);
-  if (_legendFilter) {
-    pool = pool.filter(p => {
-      const poke = getPokemonByIndex(String(p.species));
-      const isLegend = poke?.legend === true;
-      return _legendFilter === 'legend' ? isLegend : !isLegend;
+  const adv = _advFilter;
+  if (adv) {
+    // 高级筛选：名称/来源/稀有度/闪光/变体/属性/地区/等级/个体值/性别
+    if (adv.poke) pool = pool.filter(p => String(p.species) === adv.poke); // 下拉点选精确到某一只
+    else if (adv.q) pool = pool.filter(p => matchesQuery(p, adv.q));
+    if (adv.src) pool = pool.filter(p =>
+      adv.src === 'normal' ? p.source === 'normal'
+        : adv.src === 'mass' ? p.source === 'mass' : p.source === adv.src);
+    if (adv.legend) {
+      pool = pool.filter(p => {
+        const isLegend = getPokemonByIndex(String(p.species))?.legend === true;
+        return adv.legend === 'legend' ? isLegend : !isLegend;
+      });
+    }
+    if (adv.shiny) pool = pool.filter(p => adv.shiny === 'shiny' ? !!p.shiny : !p.shiny);
+    if (adv.variant) pool = pool.filter(p => {
+      if (adv.variant === 'none') return !p.variant;
+      return p.variant === adv.variant;
     });
+    if (adv.type && adv.type.length) pool = pool.filter(p => {
+      const poke = getPokemonByIndex(String(p.species));
+      const ts = (poke && poke.types) || [];
+      return adv.type.every(t => ts.includes(t));
+    });
+    if (adv.region) pool = pool.filter(p => {
+      const poke = getPokemonByIndex(String(p.species));
+      return poke?.region === adv.region;
+    });
+    if (adv.lvMin !== '') pool = pool.filter(p => (p.level || 1) >= Number(adv.lvMin));
+    if (adv.lvMax !== '') pool = pool.filter(p => (p.level || 1) <= Number(adv.lvMax));
+    if (adv.ivMin !== '') pool = pool.filter(p => ivSum(p) >= Number(adv.ivMin));
+    if (adv.ivMax !== '') pool = pool.filter(p => ivSum(p) <= Number(adv.ivMax));
+    if (adv.gender) pool = pool.filter(p => ensureGender(p) === adv.gender);
+  } else {
+    // 普通模式：来源 → 稀有度 → 闪光 →（时空扭曲）变体 → 属性 → 地区 → 搜索词
+    // 大量出没（mass）归入「野生」（normal）；时空扭曲（twist）单列来源
+    const q = ($('rosterSearchInput')?.value || '').trim();
+    if (_srcFilter) pool = pool.filter(p => _srcFilter === 'normal' ? (p.source === 'normal' || p.source === 'mass') : p.source === _srcFilter);
+    if (_legendFilter) {
+      pool = pool.filter(p => {
+        const poke = getPokemonByIndex(String(p.species));
+        const isLegend = poke?.legend === true;
+        return _legendFilter === 'legend' ? isLegend : !isLegend;
+      });
+    }
+    if (_shinyFilter) pool = pool.filter(p => _shinyFilter === 'shiny' ? p.shiny : !p.shiny);
+    // 外观变体筛选：any=含任一变体，rgb/polluted=指定变体
+    if (_variantFilter) {
+      pool = pool.filter(p => _variantFilter === 'any' ? !!p.variant : p.variant === _variantFilter);
+    }
+    // 属性筛选：含有目标属性的宝可梦都筛出来（单属性/双属性均可命中）
+    if (_typeFilter) pool = pool.filter(p => {
+      const poke = getPokemonByIndex(String(p.species));
+      return poke?.types?.includes(_typeFilter);
+    });
+    // 地区筛选
+    if (_regionFilter) pool = pool.filter(p => {
+      const poke = getPokemonByIndex(String(p.species));
+      return poke?.region === _regionFilter;
+    });
+    // 搜索
+    if (q) pool = pool.filter(p => matchesQuery(p, q));
   }
-  if (_shinyFilter) {
-    pool = pool.filter(p => _shinyFilter === 'shiny' ? p.shiny : !p.shiny);
-  }
-  // 外观变体筛选：any=含任一变体，rgb/polluted=指定变体
-  if (_variantFilter) {
-    pool = pool.filter(p => _variantFilter === 'any' ? !!p.variant : p.variant === _variantFilter);
-  }
-  // 属性筛选：含有目标属性的宝可梦都筛出来（单属性/双属性均可命中）
-  if (_typeFilter) pool = pool.filter(p => {
-    const poke = getPokemonByIndex(String(p.species));
-    return poke?.types?.includes(_typeFilter);
-  });
-  // 地区筛选
-  if (_regionFilter) pool = pool.filter(p => {
-    const poke = getPokemonByIndex(String(p.species));
-    return poke?.region === _regionFilter;
-  });
-  // 搜索
-  if (q) pool = pool.filter(p => matchesQuery(p, q));
   // 选取模式：排除已在队伍/训练中的个体
   if (_picker?.exclude?.length) {
     const ex = new Set(_picker.exclude);
@@ -182,6 +213,17 @@ function renderList() {
   }
   // 选取模式（配队/训练）：蛋不可作为宝可梦使用（M3 全站过滤）
   if (_picker) pool = pool.filter(p => isPokemon(p));
+  return pool;
+}
+
+// 过滤 + 排序 + 渲染列表
+function renderList() {
+  const list = $('rosterList');
+  if (!list) return;
+  const pool = currentFilterPool();
+  // 全选按钮仅在批量放生模式下显示（右上角）
+  const selAllBtn = $('rosterSelectAll');
+  if (selAllBtn) selAllBtn.style.display = _batchRelease ? '' : 'none';
   // 进度显示（与图鉴顶部统计一致的样式）
   const prog = $('rosterProgress');
   if (prog) {
@@ -198,7 +240,10 @@ function renderList() {
     } else {
       const total = inRoster().length;
       const shinyCount = inRoster().filter(p => p.shiny).length;
-      prog.textContent = q || _srcFilter || _legendFilter || _shinyFilter || _variantFilter || _typeFilter || _regionFilter
+      const inAdv = !!_advFilter;
+      const basicFilter = _srcFilter || _legendFilter || _shinyFilter || _variantFilter || _typeFilter || _regionFilter
+        || ($('rosterSearchInput')?.value || '').trim();
+      prog.textContent = inAdv || basicFilter
         ? `共 ${total} 只 · 匹配 ${pool.length} 只`
         : `共 ${total} 只 · 闪光 ${shinyCount} 只`;
     }
@@ -227,7 +272,10 @@ function renderList() {
   const seq = _renderSeq;
   list.innerHTML = '';
   if (sorted.length === 0) {
-    list.innerHTML = `<div class="roster-empty">${_picker ? '没有可选择的宝可梦' : '仓库空空如也，去捕获一些宝可梦吧'}</div>`;
+    const hasFilter = _picker || _batchRelease || !!_advFilter
+      || _srcFilter || _legendFilter || _shinyFilter || _variantFilter || _typeFilter || _regionFilter
+      || !!($('rosterSearchInput')?.value || '').trim();
+    list.innerHTML = `<div class="roster-empty">${hasFilter ? '没有匹配的宝可梦' : '仓库空空如也，去捕获一些宝可梦吧'}</div>`;
   } else {
     let i = 0;
     const CHUNK = 40;
@@ -291,9 +339,7 @@ function rowHtml(p) {
   return `
     <div class="pokedex-entry roster-row" data-rid="${p.id}">
       <span class="roster-icon">${icon}</span>
-      <span class="pokedex-star">${p.shiny
-        ? (p.variant === 'rgb' || p.variant === 'polluted') ? TWIST_SHINY : STAR_FILLED
-        : (p.variant === 'rgb' || p.variant === 'polluted') ? TWIST_ICON : ''}</span>
+      <span class="pokedex-star">${pokemonSourceBadge(p)}</span>
       <span class="pokedex-idx">#${p.species}</span>
       <span class="pokedex-name">${rosterName(p)}</span>
       <span class="roster-lv-col">${gSpan}Lv${p.level || 1}</span>
@@ -573,7 +619,7 @@ const MOVE_CAT_ICON = { phys: 'physical.png', spec: 'special.png', status: 'stat
 const MOVE_CAT_CN = { phys: '物理', spec: '特殊', status: '变化' };
 function moveCat(mv) {
   const ef = mv.effect || {};
-  if (ef.kind === 'damage' || ef.kind === 'multihit' || ef.kind === 'drain' || ef.kind === 'recoil' || ef.kind === 'fixed' || ef.kind === 'counter') {
+  if (ef.kind === 'damage' || ef.kind === 'explode' || ef.kind === 'multihit' || ef.kind === 'drain' || ef.kind === 'recoil' || ef.kind === 'fixed' || ef.kind === 'counter') {
     return ef.cat === 'spec' ? 'spec' : 'phys';
   }
   return 'status';
@@ -611,6 +657,7 @@ function moveDesc(mv) {
       return `${ef.target === 'self' ? '提升自身' : '降低对手'} ${parts.join('、')}。`;
     }
     case 'drain': return `造成伤害，并回复造成伤害${ef.ratio ? Math.round(ef.ratio * 100) + '%' : ''}的HP。`;
+    case 'explode': return '对目标造成巨大伤害，但使用者会当场倒下。';
     case 'recoil': return `造成伤害，但自身也会承受${Math.round((ef.ratio || 0.25) * 100)}%的反噬伤害。`;
     case 'fixed': return '无视对手防御，造成固定伤害。';
     case 'counter': return '本回合受到物理攻击后使用，可将该伤害翻倍返还给对手。';
@@ -677,8 +724,9 @@ function meMoveGhost(e) {
   const g = meDragGhost();
   if (!g) return;
   const r = $('moveEditView').getBoundingClientRect();
-  g.style.left = (e.clientX - r.left) + 'px';
-  g.style.top = (e.clientY - r.top) + 'px';
+  const { x: lx, y: ly } = logicViewport(e.clientX, e.clientY); // zoom 下还原逻辑坐标，与 rect 对齐
+  g.style.left = (lx - r.left) + 'px';
+  g.style.top = (ly - r.top) + 'px';
 }
 
 function bindMoveEditDrag(box) {
@@ -829,8 +877,9 @@ function showMoveSortMenu(x, y) {
   ).join('');
   menu.style.display = '';
   const mw = menu.offsetWidth, mh = menu.offsetHeight;
-  menu.style.left = Math.max(0, Math.min(x - 24, window.innerWidth - mw - 4)) + 'px';
-  menu.style.top = Math.max(0, Math.min(y, window.innerHeight - mh - 4)) + 'px';
+  const { x: lx, y: ly, w: vw, h: vh } = logicViewport(x, y); // zoom 下还原逻辑坐标
+  menu.style.left = Math.max(0, Math.min(lx - 24, vw - mw - 4)) + 'px';
+  menu.style.top = Math.max(0, Math.min(ly, vh - mh - 4)) + 'px';
   // 菜单内点击不触发外部关闭；点击外部任意位置关闭
   menu.addEventListener('pointerdown', (e) => e.stopPropagation());
   menu.onclick = (e) => {
@@ -977,11 +1026,15 @@ function showRosterDetail(id) {
   if (!rootEl) return;
   const listEl = $('rosterList');
   if (listEl) { listEl.dataset.savedScroll = listEl.scrollTop; listEl.scrollTop = 0; } // 记住列表位置，详情从顶部开始
-  // 隐藏搜索框、表头和进度（与图鉴详情一致）
+  // 隐藏搜索框、表头、进度和高级筛选预览条（与图鉴详情一致）
   rootEl.querySelector('.pokedex-search').style.display = 'none';
   rootEl.querySelector('.roster-header').style.display = 'none';
   const prog = $('rosterProgress');
   if (prog) prog.style.display = 'none';
+  const advBar = $('rosterAdvBar');
+  if (advBar) advBar.style.display = 'none';
+  const advAll = $('rosterSelectAll');
+  if (advAll) advAll.style.display = 'none';
 
   const poke = getPokemonByIndex(String(p.species));
   const dGSpan = genderBadge(ensureGender(p));
@@ -1125,6 +1178,335 @@ function releaseXpText(gained, candies) {
 let _batchRelease = false;
 let _batchSelected = new Set();
 
+// ===== 高级筛选 =====
+const ADV_SRCS = [['', '不限'], ['normal', '野生'], ['mass', '大量出没'], ['twist', '时空扭曲'], ['fishing', '钓鱼'], ['egg', '孵蛋'], ['honey', '甜甜蜜'], ['trade', '交换']];
+
+// 打开高级筛选面板：罗列全部分组，单选互斥
+function openAdvFilter() {
+  if (_batchRelease) cancelBatchRelease();
+  let panel = document.getElementById('advFilterPanel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'advFilterPanel';
+    panel.className = 'adv-filter-overlay';
+    // 挂到掌机 console 内（absolute 定位只覆盖 console 区域，不铺满浏览器窗口）
+    const host = document.querySelector('.console') || document.body;
+    host.appendChild(panel);
+    panel.addEventListener('click', (e) => { if (e.target === panel) closeAdvFilter(); });
+  }
+  panel.innerHTML = advFilterHtml();
+  panel.style.display = 'flex';
+  bindAdvFilter(panel);
+}
+
+function closeAdvFilter() {
+  const panel = document.getElementById('advFilterPanel');
+  if (panel) panel.style.display = 'none';
+}
+
+// 高级筛选面板搜索框回显值：选中某只宝可梦时显示其名称，否则回显文本
+function advFilterQValue(F) {
+  if (F.poke) {
+    const poke = getPokemonByIndex(String(F.poke));
+    if (poke) return poke.form || poke.name;
+  }
+  return F.q || '';
+}
+
+// 下拉匹配（对齐图鉴搜索：编号/名称/形态/拼音/首字母/拼音部分匹配）
+function advPokemonMatches(p, q) {
+  const upper = q.toUpperCase();
+  return String(p.index).includes(q)
+    || p.name.includes(q)
+    || (p.form || '').includes(q)
+    || String(p.pinyin || '').toUpperCase().includes(upper)
+    || String(p.pinyinInitials || '').toUpperCase().includes(upper)
+    || matchPinyinPartial(q, p.pinyin);
+}
+
+function advFilterHtml() {
+  const F = _advFilter || {};
+  // 紧凑 chips 单选：两列网格分组，属性/来源/地区跨整行
+  const chip = (group, val, label) =>
+    `<span class="adv-chip${(F[group] || '') === val ? ' sel' : ''}" data-group="${group}" data-val="${val}">${label}</span>`;
+  const typeChips = Object.keys(TYPE_COLORS).map(t =>
+    `<span class="adv-chip${(F.type || []).includes(t) ? ' sel' : ''}" data-group="type" data-val="${t}">
+      <span class="roster-type-dot" style="background:${TYPE_COLORS[t]}"></span>${t}</span>`).join('');
+  const regionChips = REGION_CYCLE.map(r => chip('region', r, r)).join('');
+  return `
+  <div class="adv-filter-panel">
+    <div class="adv-filter-title">高级筛选<button class="adv-filter-close" id="advFilterCloseBtn">✕</button></div>
+    <div class="adv-filter-body">
+      <label class="adv-group-name">搜索宝可梦</label>
+      <form class="adv-search-wrap" autocomplete="off" onsubmit="event.preventDefault();return false;">
+        <input class="adv-search-input" id="advFilterQ" type="text" placeholder="名称 / 拼音 / 首字母" name="advq" autocorrect="off" autocapitalize="off" spellcheck="false"
+          value="${advFilterQValue(F)}" data-selected-index="${F.poke || ''}" data-selected-name="${advFilterQValue(F).replace(/"/g, '&quot;')}" />
+        <button class="adv-search-clear" id="advFilterQClear" style="display:none;" aria-label="清空搜索">
+          <svg><use xlink:href="#icon-close" /></svg>
+        </button>
+        <div class="pokedex-dropdown" id="advFilterSuggest" style="display:none;"></div>
+      </form>
+
+      <div class="adv-range-grid">
+        <div class="adv-group"><div class="adv-group-name">等级范围</div><div class="adv-chips adv-range">
+          <input class="adv-num-input" id="advFilterLvMin" type="text" inputmode="numeric" maxlength="3" placeholder="最小" value="${F.lvMin ?? 0}" />
+          <span class="adv-range-sep">~</span>
+          <input class="adv-num-input" id="advFilterLvMax" type="text" inputmode="numeric" maxlength="3" placeholder="最大" value="${F.lvMax ?? 100}" />
+        </div></div>
+        <div class="adv-group"><div class="adv-group-name">个体值总和</div><div class="adv-chips adv-range">
+          <input class="adv-num-input" id="advFilterIvMin" type="text" inputmode="numeric" maxlength="3" placeholder="最小" value="${F.ivMin ?? 0}" />
+          <span class="adv-range-sep">~</span>
+          <input class="adv-num-input" id="advFilterIvMax" type="text" inputmode="numeric" maxlength="3" placeholder="最大" value="${F.ivMax ?? 186}" />
+        </div></div>
+      </div>
+
+      <div class="adv-grid">
+        <div class="adv-group"><div class="adv-group-name">稀有度</div><div class="adv-chips">
+          ${chip('legend', '', '不限')}${chip('legend', 'normal', '普通')}${chip('legend', 'legend', '神兽')}
+        </div></div>
+        <div class="adv-group"><div class="adv-group-name">闪光</div><div class="adv-chips">
+          ${chip('shiny', '', '不限')}${chip('shiny', 'normal', '非闪光')}${chip('shiny', 'shiny', '闪光')}
+        </div></div>
+        <div class="adv-group"><div class="adv-group-name">特效</div><div class="adv-chips">
+          ${chip('variant', '', '不限')}${chip('variant', 'none', '无特效')}${chip('variant', 'rgb', 'RGB')}${chip('variant', 'polluted', '污染')}
+        </div></div>
+        <div class="adv-group"><div class="adv-group-name">性别</div><div class="adv-chips">
+          ${chip('gender', '', '不限')}${chip('gender', 'male', '雄性')}${chip('gender', 'female', '雌性')}${chip('gender', 'genderless', '无性别')}
+        </div></div>
+        <div class="adv-group adv-span2"><div class="adv-group-name">来源</div><div class="adv-chips">
+          ${ADV_SRCS.map(([v, l]) => chip('src', v, l)).join('')}
+        </div></div>
+        <div class="adv-group adv-span2"><div class="adv-group-name">地区</div><div class="adv-chips">
+          ${chip('region', '', '不限')}${regionChips}
+        </div></div>
+        <div class="adv-group adv-span2"><div class="adv-group-name">属性</div><div class="adv-chips">
+          ${typeChips}
+        </div></div>
+      </div>
+
+    </div>
+    <div class="adv-filter-foot">
+      <button class="adv-filter-btn" id="advFilterClearBtn">重置</button>
+      <button class="adv-filter-btn adv-filter-btn-main" id="advFilterApplyBtn">应用</button>
+    </div>
+  </div>`;
+}
+
+function bindAdvFilter(panel) {
+  // 搜索宝可梦：输入时弹出同款下拉建议（对齐图鉴搜索），点选后精确筛选该宝可梦
+  const qInput = panel.querySelector('#advFilterQ');
+  const suggest = panel.querySelector('#advFilterSuggest');
+  const qClear = panel.querySelector('#advFilterQClear');
+  const hideSuggest = () => { if (suggest) suggest.style.display = 'none'; };
+  const setClear = (show) => { if (qClear) qClear.style.display = show ? '' : 'none'; };
+  let hideTimer = null;
+  if (qInput && suggest) {
+    setClear(!!qInput.value.trim());
+    if (qClear) qClear.addEventListener('click', () => {
+      qInput.value = '';
+      qInput.removeAttribute('data-selected-index');
+      qInput.removeAttribute('data-selected-name');
+      suggest.innerHTML = '';
+      hideSuggest();
+      setClear(false);
+      qInput.focus();
+    });
+    qInput.addEventListener('input', () => {
+      hideSuggest();
+      const q = qInput.value.trim();
+      setClear(!!q);
+      if (!q) {
+        qInput.removeAttribute('data-selected-index');
+        qInput.removeAttribute('data-selected-name');
+        return;
+      }
+      // 用户手动改动文本后，取消已选中的宝可梦
+      if (qInput.dataset.selectedIndex && qInput.value !== qInput.dataset.selectedName) {
+        qInput.removeAttribute('data-selected-index');
+        qInput.removeAttribute('data-selected-name');
+      }
+      const matched = allPokemon.filter(p => advPokemonMatches(p, q)).slice(0, 50);
+      if (!matched.length) return;
+      suggest.innerHTML = matched.map(p =>
+        `<div class="pokedex-dropdown-item" data-index="${p.index}">
+          <span class="dd-idx">#${p.index}</span>
+          <span class="dd-name">${p.form || p.name}</span>
+        </div>`).join('');
+      suggest.style.display = '';
+      suggest.querySelectorAll('.pokedex-dropdown-item').forEach(el => {
+        el.addEventListener('click', () => {
+          const idx = el.dataset.index;
+          const poke = getPokemonByIndex(idx);
+          const nm = poke ? (poke.form || poke.name) : idx;
+          qInput.value = nm;
+          qInput.dataset.selectedIndex = idx;
+          qInput.dataset.selectedName = nm;
+          setClear(true);
+          suggest.innerHTML = ''; // 清空下拉内容，避免 focus 回调再次弹出
+          hideSuggest();
+          qInput.focus();
+        });
+      });
+    });
+    qInput.addEventListener('blur', () => {
+      hideTimer = setTimeout(hideSuggest, 200);
+    });
+    qInput.addEventListener('focus', () => {
+      if (hideTimer) clearTimeout(hideTimer);
+      if (qInput.value.trim() && suggest.children.length > 0) suggest.style.display = '';
+    });
+    // 回车直接收起下拉（应用按钮兜底）
+    qInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); hideSuggest(); }
+    });
+  }
+
+  // chip：一般组单选互斥；属性组 type 可多选（最多 2 个，再点取消）
+  panel.querySelectorAll('.adv-chip').forEach(el => {
+    el.addEventListener('click', () => {
+      const g = el.dataset.group;
+      if (g === 'type') {
+        if (el.classList.contains('sel')) {
+          el.classList.remove('sel'); // 已选中：取消
+        } else {
+          const selCount = panel.querySelectorAll('.adv-chip[data-group="type"].sel').length;
+          if (selCount < 2) el.classList.add('sel'); // 最多选 2 个
+        }
+      } else {
+        panel.querySelectorAll(`.adv-chip[data-group="${g}"]`).forEach(c => c.classList.remove('sel'));
+        el.classList.add('sel');
+      }
+    });
+  });
+  panel.querySelector('#advFilterCloseBtn').addEventListener('click', closeAdvFilter);
+  panel.querySelector('#advFilterClearBtn').addEventListener('click', () => {
+    // 重置：直接恢复各控件默认值，避免重建 DOM 造成闪烁；关闭交给右上角 ✕
+    panel.querySelectorAll('.adv-chip').forEach(c => {
+      // 每组恢复「不限」（data-val 为空）为选中，其余取消；属性组无「不限」则全取消
+      const isNone = c.dataset.val === '';
+      c.classList.toggle('sel', isNone);
+    });
+    const q2 = panel.querySelector('#advFilterQ');
+    if (q2) {
+      q2.value = '';
+      q2.removeAttribute('data-selected-index');
+      q2.removeAttribute('data-selected-name');
+    }
+    const sg = panel.querySelector('#advFilterSuggest');
+    if (sg) { sg.innerHTML = ''; sg.style.display = 'none'; }
+    const setNum = (id, v) => { const el = panel.querySelector('#' + id); if (el) el.value = v; };
+    setNum('advFilterLvMin', 0);
+    setNum('advFilterLvMax', MAX_LEVEL);
+    setNum('advFilterIvMin', 0);
+    setNum('advFilterIvMax', 186);
+    setClear(false);
+  });
+  panel.querySelector('#advFilterApplyBtn').addEventListener('click', () => {
+    const getChips = g => {
+      const sel = panel.querySelector(`.adv-chip[data-group="${g}"].sel`);
+      return sel ? sel.dataset.val : '';
+    };
+    // 属性组多选：收集全部选中的类型
+    const getTypes = () => Array.from(panel.querySelectorAll('.adv-chip[data-group="type"].sel')).map(c => c.dataset.val);
+    // 数值输入钳制：非法/超界回退到对应默认值（等级 0~100，个体值 0~186）
+    const numClamp = (el, def, max) => {
+      const n = parseInt('' + (el ? el.value : ''), 10);
+      return isNaN(n) ? def : Math.max(0, Math.min(max, n));
+    };
+    const qInput = panel.querySelector('#advFilterQ');
+    const pokeIdx = qInput?.dataset.selectedIndex || '';
+    // 全部为默认值时视为取消：关闭面板、恢复普通列表
+    // 全默认值视为取消；「不限」chip(data-val 为空)不计入有效筛选
+    const chipAny = !!panel.querySelector('.adv-chip.sel:not([data-val=""])');
+    const qAny = !!((qInput?.value || '').trim() || pokeIdx);
+    const lvAny = numClamp(panel.querySelector('#advFilterLvMin'), 0, MAX_LEVEL) !== 0
+      || numClamp(panel.querySelector('#advFilterLvMax'), MAX_LEVEL, MAX_LEVEL) !== MAX_LEVEL;
+    const ivAny = numClamp(panel.querySelector('#advFilterIvMin'), 0, 186) !== 0
+      || numClamp(panel.querySelector('#advFilterIvMax'), 186, 186) !== 186;
+    if (!chipAny && !qAny && !lvAny && !ivAny) {
+      _advFilter = null;
+      syncAdvFilterUi();
+      renderList();
+      closeAdvFilter();
+      return;
+    }
+    _advFilter = {
+      poke: pokeIdx,
+      q: pokeIdx ? '' : (qInput?.value || '').trim(),
+      legend: getChips('legend'),
+      shiny: getChips('shiny'),
+      variant: getChips('variant'),
+      src: getChips('src'),
+      type: getTypes(),
+      region: getChips('region'),
+      lvMin: numClamp(panel.querySelector('#advFilterLvMin'), 0, MAX_LEVEL),
+      lvMax: numClamp(panel.querySelector('#advFilterLvMax'), MAX_LEVEL, MAX_LEVEL),
+      ivMin: numClamp(panel.querySelector('#advFilterIvMin'), 0, 186),
+      ivMax: numClamp(panel.querySelector('#advFilterIvMax'), 186, 186),
+      gender: getChips('gender'),
+    };
+    syncAdvFilterUi();
+    renderList();
+    closeAdvFilter();
+  });
+}
+
+// 高级筛选中：隐藏基础搜索行，用预览条展示当前条件；清除链接恢复基础搜索行
+function syncAdvFilterUi() {
+  const root = $('rosterView');
+  if (!root) return;
+  const search = root.querySelector('.pokedex-search');
+  const bar = $('rosterAdvBar');
+  const active = !!_advFilter;
+  if (search) search.style.display = active ? 'none' : '';
+  if (bar) {
+    bar.style.display = active ? '' : 'none';
+    if (active) {
+      bar.innerHTML = advFilterBadges(_advFilter)
+        + '<a class="adv-bar-clear" id="advBarClear">清除筛选</a>';
+      const clearBtn = bar.querySelector('#advBarClear');
+      if (clearBtn) clearBtn.addEventListener('click', () => {
+        _advFilter = null;
+        syncAdvFilterUi();
+        renderList();
+      });
+    }
+  }
+}
+
+const ADV_SRC_NAMES = { normal: '野生', mass: '大量出没', twist: '时空扭曲', fishing: '钓鱼', egg: '孵蛋', honey: '甜甜蜜', trade: '交换' };
+function advFilterBadges(F) {
+  const parts = [];
+  if (F.poke) {
+    const poke = getPokemonByIndex(String(F.poke));
+    parts.push(poke ? (poke.form || poke.name) : F.poke);
+  } else if (F.q) parts.push(F.q);
+  if (F.legend === 'normal') parts.push('普通');
+  if (F.legend === 'legend') parts.push('神兽');
+  if (F.shiny === 'normal') parts.push('非闪光');
+  if (F.shiny === 'shiny') parts.push('闪光');
+  if (F.variant === 'none') parts.push('无特效');
+  if (F.variant === 'rgb') parts.push('RGB');
+  if (F.variant === 'polluted') parts.push('污染');
+  if (F.src) parts.push(ADV_SRC_NAMES[F.src] || F.src);
+  if (F.type && F.type.length) parts.push(F.type.join('+'));
+  if (F.region) parts.push(F.region);
+  const lvMin = Number(F.lvMin), lvMax = Number(F.lvMax);
+  const lv = [];
+  if (!isNaN(lvMin) && lvMin > 0) lv.push(`≥${lvMin}`);
+  if (!isNaN(lvMax) && lvMax < 100) lv.push(`≤${lvMax}`);
+  if (lv.length) parts.push(`等级${lv.join(' ')}`);
+  const ivMin = Number(F.ivMin), ivMax = Number(F.ivMax);
+  const iv = [];
+  if (!isNaN(ivMin) && ivMin > 0) iv.push(`≥${ivMin}`);
+  if (!isNaN(ivMax) && ivMax < 186) iv.push(`≤${ivMax}`);
+  if (iv.length) parts.push(`个体值${iv.join(' ')}`);
+  if (F.gender) parts.push(F.gender === 'male' ? '雄性' : F.gender === 'female' ? '雌性' : '无性');
+  return parts.map(t => `<span class="adv-bar-chip">${t}</span>`).join('');
+}
+
+// ===== 批量放生 =====
+
 function showContextMenu(x, y) {
   let menu = document.getElementById('rosterCtxMenu');
   if (!menu) {
@@ -1133,14 +1515,16 @@ function showContextMenu(x, y) {
     menu.className = 'shop-ctx-menu';
     document.body.appendChild(menu);
   }
-  menu.innerHTML = `<div class="shop-ctx-item" data-action="batchRelease">批量放生</div>`;
-  menu.style.left = Math.min(x, window.innerWidth - 120) + 'px';
-  menu.style.top = Math.min(y, window.innerHeight - 50) + 'px';
+  menu.innerHTML = `<div class="shop-ctx-item" data-action="advFilter">高级筛选</div><div class="shop-ctx-item" data-action="batchRelease">批量放生</div>`;
+  const { x: lx, y: ly, w: vw, h: vh } = logicViewport(x, y); // zoom 下还原逻辑坐标
+  menu.style.left = Math.min(lx, vw - 120) + 'px';
+  menu.style.top = Math.min(ly, vh - 70) + 'px';
   menu.style.display = 'block';
   menu.onclick = (e) => {
     const act = e.target.closest('[data-action]')?.dataset.action;
     hideContextMenu();
-    if (act === 'batchRelease') startBatchRelease();
+    if (act === 'advFilter') openAdvFilter();
+    else if (act === 'batchRelease') startBatchRelease();
   };
   setTimeout(() => document.addEventListener('click', hideContextMenu, { once: true }), 0);
 }
@@ -1452,6 +1836,7 @@ export function showRosterView(noNav) {
     setupTypeFilter();
     setupRegionFilter();
     setupHeaderSort();
+    setupSelectAll();
     _uiBound = true;
   }
   _detailId = null;
@@ -1467,8 +1852,20 @@ export function showRosterView(noNav) {
   }
   const prog = $('rosterProgress');
   if (prog) prog.style.display = '';
+  syncAdvFilterUi(); // 恢复高级筛选预览条状态（搜索行显隐）
   renderList();
   showView('rosterView');
+}
+
+// 全选：把当前筛选结果全部勾入批量放生
+function setupSelectAll() {
+  const btn = $('rosterSelectAll');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    if (!_batchRelease) return;
+    currentFilterPool().forEach(p => _batchSelected.add(p.id));
+    renderList(); // 重绘行样式并刷新底部确认栏
+  });
 }
 
 // 从“获得宝可梦→查看详情”进入仓库个体详情（捕获/孵蛋/交换成功后的确认跳转）

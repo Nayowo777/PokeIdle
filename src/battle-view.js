@@ -1,6 +1,6 @@
 // 流程：NPC 列表 → 自动编队（仓库中等级最高 6 只）→ 回合制战斗（动画）→ 结算（经验/糖果）
 // 与挂机主循环解耦：战斗只在手机 App 内进行，不影响地图/遇敌/离线
-import { $, showView, tryLoadPokemonImage, tryLoadPokemonIcon, updateStats, updateBackpack } from './ui.js';
+import { $, showView, tryLoadPokemonImage, tryLoadPokemonIcon, updateStats, updateBackpack, logicViewport } from './ui.js';
 import { gameData, getPokemonByIndex, addSystemLog, saveGame, pushNav, setPhase, currentEncounter, phase, ensureGender, rollGender, genderBadge, isPokemon } from './state.js';
 import { createMon, useMove, preTurn, postTurn, aiMove, tickBattleTurns, transformMon } from './battle-core.js';
 import { typeMult } from './type-chart.js';
@@ -13,11 +13,11 @@ import * as road from './road.js';
 
 // 18 属性标签色（与图鉴/遇敌一致）
 export const TYPE_COLORS = {
-  '一般': '#B5B4AF', '格斗': '#BE4D47', '飞行': '#81b9ef', '毒': '#8943B0',
-  '地面': '#9C5A59', '岩石': '#D3A865', '虫': '#9CAE1E', '幽灵': '#704170',
-  '钢': '#60a1b8', '火': '#E75357', '水': '#3F98EA', '草': '#3fa129',
-  '电': '#F9CE40', '超能': '#F8669C', '冰': '#3fd8ff', '龙': '#5060e1',
-  '恶': '#61484B', '妖精': '#E259E7',
+  '一般': '#9F9E9A', '格斗': '#A7443E', '飞行': '#72A3D2', '毒': '#793B9B',
+  '地面': '#894F4E', '岩石': '#BA9459', '虫': '#89991A', '幽灵': '#633963',
+  '钢': '#548EA2', '火': '#CB494D', '水': '#3786CE', '草': '#378E24',
+  '电': '#DBB538', '超能': '#DA5A89', '冰': '#37BEE0', '龙': '#4654C6',
+  '恶': '#553F42', '妖精': '#C74ECB',
 };
 
 // 属性特攻特效：命中瞬间按招式属性迸发专属粒子（12 个元素系属性专属，其余属性保留默认白火花）。
@@ -55,7 +55,7 @@ const STAT_NAMES = ['攻击', '防御', '特攻', '特防', '速度', '命中率
 const MOVE_CAT_CN = { phys: '物理', spec: '特殊', status: '变化' };
 function moveCat(mv) {
   const ef = mv.effect || {};
-  if (ef.kind === 'damage' || ef.kind === 'multihit' || ef.kind === 'drain' || ef.kind === 'recoil' || ef.kind === 'fixed' || ef.kind === 'counter' || ef.kind === 'mirrorCoat') {
+  if (ef.kind === 'damage' || ef.kind === 'explode' || ef.kind === 'multihit' || ef.kind === 'drain' || ef.kind === 'recoil' || ef.kind === 'fixed' || ef.kind === 'counter' || ef.kind === 'mirrorCoat') {
     if (ef.kind === 'mirrorCoat') return 'spec'; // 镜面反射：返还特殊伤害，属特殊攻击
     return ef.cat === 'spec' ? 'spec' : 'phys';
   }
@@ -261,13 +261,6 @@ async function forceRefreshWave() {
   updateStats(); // 顶部糖果计数即时刷新
   renderBattleList();
 }
-
-// 调试：一键清空 NPC 列表（F12 控制台调用 window.__debugClearNpcs() 后回列表页即显示空状态）
-window.__debugClearNpcs = () => {
-  if (gameData.battleNpcs?.list) gameData.battleNpcs.list = [];
-  renderBattleList();
-  return 'NPC 列表已清空';
-};
 
 // 距下一波刷新剩余时间文案（与交换页同款）
 function refreshText() {
@@ -926,8 +919,9 @@ function showLogMenu(x, y) {
   menu.innerHTML = '<div class="shop-ctx-item"><span class="shop-ctx-qty">查看对战记录</span></div>';
   menu.style.display = '';
   const mw = menu.offsetWidth, mh = menu.offsetHeight;
-  menu.style.left = Math.max(0, Math.min(x - 24, window.innerWidth - mw - 4)) + 'px';
-  menu.style.top = Math.max(0, Math.min(y, window.innerHeight - mh - 4)) + 'px';
+  const { x: lx, y: ly, w: vw, h: vh } = logicViewport(x, y); // zoom 下还原逻辑坐标
+  menu.style.left = Math.max(0, Math.min(lx - 24, vw - mw - 4)) + 'px';
+  menu.style.top = Math.max(0, Math.min(ly, vh - mh - 4)) + 'px';
   menu.addEventListener('pointerdown', (e) => e.stopPropagation());
   menu.onclick = (e) => {
     if (!e.target.closest('.shop-ctx-item')) return;

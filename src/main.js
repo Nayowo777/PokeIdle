@@ -1,7 +1,7 @@
 // ===== 口袋挂机 - 入口模块 =====
 // 禁用全局右键菜单（桌面端 webview 的原生右键菜单）
 document.addEventListener('contextmenu', e => e.preventDefault());
-import { CATCH_RATES, SAVE_INTERVAL, ENCOUNTER_MIN, ENCOUNTER_MAX, ITEM_RATES, ITEM_NAMES, ROAD_SPECIAL_CHANCE, ROAD_WIDTH_MIN, ROAD_WIDTH_MAX, ROAD_SWITCH_CYCLES, BIKE_RESTORE_MAX_GAP_MS } from './config.js';
+import { CATCH_RATES, SAVE_INTERVAL, ENCOUNTER_MIN, ENCOUNTER_MAX, ITEM_RATES, ITEM_NAMES, ROAD_SPECIAL_CHANCE, ROAD_WIDTH_MIN, ROAD_WIDTH_MAX, ROAD_SWITCH_CYCLES, BIKE_RESTORE_MAX_GAP_MS, PX_PER_METER } from './config.js';
 import {
   allPokemon, gameData, phase, currentEncounter, currentIsShiny,
   currentEncounterBalls, encounterBallsUsed,
@@ -38,14 +38,14 @@ import {
 } from './ui.js';
 import { spawnItemDrop, activateHoney, activateShinyCharm,
   startHoneyCountdown, startCharmCountdown, clearHoneyCountdown, clearCharmCountdown,
-  doCandyExchange, grantItem, cancelItemDrop } from './items.js';
+  doCandyExchange, grantItem, cancelItemDrop, rollCandyMult } from './items.js';
 import { syncBlockVisual, startBlockCountdown, clearBlockCountdown, showMixerView } from './mixer.js';
 import { scheduleNextEncounter, throwBall, fleeEncounter, goIdle,
   tryEncounter, pauseAutoFleeTimer, autoCatch, showEncounter, isLegendEncounter, setDebugNextEncounter, tryAutoRefill, catchFilterResult,
-  settleBackgroundEncounters } from './battle.js';
+  catchUpEncounters, settleEncounterForBackground, settleBackgroundEncounters } from './battle.js';
 import { startIdleRotation, buildIdleMessages } from './messages.js';
 import { tryStartFishing, onRoadChanged, getFishingGuarantee, isFishingPending } from './fishing.js';
-import { helperTick, refreshBerryView, showBerryView } from './berry.js';
+import { helperTick, refreshBerryView, showBerryView, catchUpHelper } from './berry.js';
 import { startIntro, advanceIntro, confirmIntro } from './intro.js';
 import { restorePokedex, setupRegionDropdown, setupStatusDropdown, setupTypeFilter,
   showPokedex, setupPokedexSearch } from './pokedex.js';
@@ -68,6 +68,7 @@ import * as road from './road.js';
 import * as particles from './particles.js';
 import { chooseNewestSave } from './save-utils.js';
 import { cancelSaveTransferDialog } from './save-transfer-controller.js';
+import { initBackgroundCatchup, startBackgroundCatchup, bgCatchupEnabled, bgTakeAccum, bgTakeBike, bgTakeBuffRemainingMs } from './background-catchup.js';
 
 let ROAD_PRESETS = null;
 let ROAD_LAND = [];   // 普通陆地路段池（无垂钓点、非自行车道）
@@ -326,14 +327,15 @@ function tryUseBike() {
 
 // 告别场景（放生确认/悬赏提交/交换展示）是否打开：期间锁定顶部导航、底部三区与背包，防止误点打断流程
 const isGoodbyeActive = () => $('goodbyeView')?.style.display === 'flex';
-// 全屏确认场景总锁：告别/派遣结算/孵蛋动画/经验糖场景/NPC对战/批量放生期间，
-// 顶部导航、底部三区、标题返回、全局快捷键一律禁用，防止误触打断流程
+// 全屏确认场景总锁：告别/派遣结算/孵蛋动画/经验糖/批量放生期间，
+// 顶部导航、底部三区、标题返回、全局快捷键一律禁用，防止误触打断流程。
+// 注意：NPC 对战（isBattleActive）不在此列——战斗中的「撤退」是合法操作（标题返回/Esc 均可），
+// 跳转锁定由各入口自己的 isBattleActive() 拦截单独负责（header/footer 已实现）
 const isModalLocked = () =>
   $('goodbyeView')?.style.display === 'flex' ||
   $('dispatchResultView')?.style.display === 'flex' ||
   $('hatchView')?.style.display === 'flex' ||
   $('expCandyView')?.style.display === 'flex' ||
-  (isBattleActive() && $('battleView')?.style.display === 'flex') ||
   (isBatchReleasing() && $('rosterView')?.style.display === 'flex');
 
 function onBagClick(itemKey) {
@@ -394,7 +396,10 @@ function onBagClick(itemKey) {
 }
 
 // ---------- 游戏 Tick ----------
-function onGameTick() {
+let _lastLogTs = -1; // 上次渲染时最新日志的时间戳（新日志或清空日志才会重渲染日志页）
+// 后台挂机停摆记账与补发入口统一收敛在 background-catchup.js（含开关、visibilitychange 记账、
+// 步态/buff 快照），onGameTick 只负责取秒数折算入账；安卓端可通过该模块的 BACKGROUND_CATCHUP 整体关闭
+async function onGameTick() {
   if (window.__introActive) return; // 开场剧情期间不推进挂机
   // 自动补球：勾选的球为 0 时每秒自动补 1 个（便宜优先），背包数量即时可见（手动/自动都生效）
   tryAutoRefill();
@@ -427,6 +432,35 @@ function onGameTick() {
   twistTick();
 
   if (phase !== 'idle') { updateStats(); return; }
+
+  // 浏览器后台挂机补算：后台/最小化期间按当前速度折算里程直接入账，不播放动画；掉落按
+  // "实际走路秒数 + 停摆秒数"折算。停摆秒数以 visibilitychange 记录的隐藏时长为主（农场等
+  // 非道路页面也有效），road 帧间隔检测作兜底（Tauri 端若 visibility 不触发仍可补）。
+  // 遇敌/钓鱼等 road 暂停时两者均为 0，不会误补。Tauri 端窗口可见时均不触发
+  const walkSec = road.takeWalkSeconds();
+  // 后台补发开关关闭时（如安卓沿用离线暂停哲学）停摆秒数不参与任何补算，主循环保持前台原行为
+  const afkSec = bgCatchupEnabled() ? Math.max(bgTakeAccum(), road.takeAfkSeconds()) : 0;
+  // 骑行停摆期间不产生掉落/遭遇（骑行不遇敌、不拾取），里程仍按骑行速度补算：
+  // 只把行走时段的停摆秒数计入掉落/遭遇补算，避免骑行结束瞬间的骑行秒数被误补
+  const idleAfkSec = bgTakeBike() ? 0 : afkSec;
+  let catchUpLog = null; // 补发汇总：后台挂机补算时打印控制台便于核对
+  if (afkSec > 0) {
+    catchUpLog = { afkSec: Math.round(afkSec), walk: 0, items: {} };
+    // 按实际滚动速率折算里程（takeDistance 实测值，高刷屏帧率>60 时速率更高，与前台推进一致）
+    const spd = road.getActualPxPerSec() || road.getSpeed() * 60;
+    const extraWalk = Math.floor(spd * afkSec);
+    if (extraWalk > 0) {
+      gameData.stats.walkDistance = (gameData.stats.walkDistance || 0) + extraWalk;
+      gpsAddDistance(extraWalk, spd);
+      catchUpLog.walk = extraWalk;
+    }
+    saveGame(); // 补算入账立即落盘，避免依赖 30 秒周期存档
+    // 树果帮手补算：后台 rAF 停摆期间帮手在线时长/劳作暂停，恢复时按前台节奏补齐
+    const helper = catchUpHelper(afkSec);
+    if (helper && helper.ok) {
+      catchUpLog.helper = { works: helper.works, ended: helper.ended, errored: helper.errored };
+    }
+  }
 
   // 遇敌调度心跳：空闲但调度计时器丢失时（如补播被 NPC 对战取消等异常路径）自动补排，
   // 避免"玩完 NPC 对战后再也不遇敌"这类卡死；事件区/钓鱼/自行车内不预排，交给各自流程延后调度
@@ -474,15 +508,55 @@ function onGameTick() {
       const key = `_f_${item}`;
       if (!gameData[key]) gameData[key] = 0;
       // 随从增益：itemdrop 类提升挂机道具掉落率
-      gameData[key] += window.__followerBoostMechanic?.('itemDrop', rate) ?? rate;
+      const effRate = window.__followerBoostMechanic?.('itemDrop', rate) ?? rate;
+      // 按实际走路秒数累积：正常滚动帧间隔累计 + 后台停摆秒数一次补齐，挂机不掉产出
+      gameData[key] += effRate * (walkSec + idleAfkSec);
       const gained = Math.floor(gameData[key]);
       if (gained > 0) {
-        gameData[key] -= gained;
-        for (let i = 0; i < gained; i++) {
-          spawnItemDrop(item);
+        if (afkSec > 0) {
+          // 后台补发：批量直接入账不播动画（日志在 grantItem 内记录），避免逐一出补发动画。
+          // 糖果按掉落次数逐次 roll 倍率（与前台 spawnItemDrop 同节奏），汇总后一次性入账
+          let gainedQty = 0;
+          for (let i = 0; i < gained; i++) {
+            gainedQty += item === 'candy' ? rollCandyMult() : 1;
+          }
+          grantItem(item, gainedQty);
+          gameData[key] -= gained;
+          if (catchUpLog) {
+            const label = ITEM_NAMES[item] || item;
+            catchUpLog.items[label] = (catchUpLog.items[label] || 0) + gainedQty;
+          }
+        } else {
+          // 只扣减真正生成成功的数量：遇敌/钓鱼/锁占用等 spawn 失败时保留累积值，下次 tick 重试，避免道具凭空丢失
+          let spawned = 0;
+          for (let i = 0; i < gained; i++) {
+            if (!spawnItemDrop(item)) break; // 失败即锁占用/非 idle，短时内重试结果相同，直接退出
+            spawned++;
+          }
+          gameData[key] -= spawned;
         }
       }
     }
+  }
+  // 补发掉落入账后立即落盘：遇敌补算（battle.js）结束时已存档，这里补掉落部分，
+  // 避免 30 秒周期存档前刷新/切走导致本次补发的道具丢失
+  if (catchUpLog && Object.keys(catchUpLog.items).length > 0) saveGame();
+
+  // 后台挂机补发汇总：遇敌补算为异步批量结算，完成后并入一并打印，便于核对每类补算了多少
+  if (catchUpLog) {
+    const enc = await catchUpEncounters(idleAfkSec, bgTakeBuffRemainingMs());
+    if (enc) catchUpLog.enc = enc;
+    const parts = [`挂机补发 ${catchUpLog.afkSec}s`];
+    if (catchUpLog.walk > 0) parts.push(`里程 +${Math.round(catchUpLog.walk / PX_PER_METER)}m`);
+    const itemNames = Object.keys(catchUpLog.items);
+    if (itemNames.length > 0) parts.push(`掉落 ${itemNames.map(k => `${k}×${catchUpLog.items[k]}`).join('、')}`);
+    if (catchUpLog.enc && catchUpLog.enc.done > 0) {
+      parts.push(`遭遇 ${catchUpLog.enc.done} 只 / 抓到 ${catchUpLog.enc.caught.length} 只`);
+      if (catchUpLog.enc.shinies > 0) parts.push(`闪光 ${catchUpLog.enc.shinies} 只`);
+    }
+    if (catchUpLog.helper) parts.push(`帮手劳作 ${catchUpLog.helper.works} 次${catchUpLog.helper.ended ? '（已到期）' : ''}`);
+    console.log('[挂机补发]', parts.join('，'));
+    if (catchUpLog.enc && catchUpLog.enc.caught.length > 0) console.log('[挂机补发] 捕获明细：', catchUpLog.enc.caught.join('、'));
   }
 
   if (gameTick % 5 === 0) { updateBackpack(); updateStats(); }
@@ -521,6 +595,18 @@ function onGameTick() {
     updateBountyBadge();
     updatePhoneBadge();
   }
+  // 系统日志页开着：新日志实时追加（按最新日志时间戳判断，条数满 50 后"加一删一"条数不变也能感知）
+  if ($('systemLogView')?.style.display === 'flex') {
+    const logs = gameData.systemLogs || [];
+    const ts = logs.length ? logs[logs.length - 1].time : -1;
+    if (ts !== _lastLogTs) {
+      _lastLogTs = ts;
+      const sv = $('systemLogView');
+      const st = sv ? sv.scrollTop : 0;
+      renderSystemLogs();
+      if (sv) sv.scrollTop = st;
+    }
+  }
 }
 
 // ---------- 开场剧情音乐开关（顶栏按钮，仅开场显示） ----------
@@ -555,7 +641,8 @@ function setupShortcuts() {
     if (window.__introActive) return;
     const key = e.key.toLowerCase();
     // 全屏场景锁定：字母快捷键一律不响应防误触跳页；Esc 放行（走 goBack 逐级安全退出场景）
-    if (isModalLocked() && key !== 'escape') return;
+    // 战斗中同样禁用字母键（跳页会打断对局），Esc 保留用于撤退
+    if ((isModalLocked() || isBattleActive()) && key !== 'escape') return;
     const ae = document.activeElement;
     if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
     if (document.getElementById('confirmBar')) return;
@@ -590,11 +677,63 @@ async function init() {
     saveTransferDialog.style.display = 'none';
   }
 
-  // 浏览器端（非 Tauri）：console 固定 274×342 居中显示，与 Tauri 端设计基准视口一致
-  //（Tauri 端由 Rust set_window_scale 用 JS 真实 dpr 计算 zoom，CSS 视口恒为 274×342）
+  // 浏览器端（非 Tauri）：console 基准 274×342，按窗口比例设置整体缩放，与 Tauri 端
+  //（Rust set_window_scale 用 JS 真实 dpr 计算 zoom，CSS 视口恒为 274×342）保持一致的画面。
+  // 必须缩放 <html> 而非 .console：局部 CSS zoom 会让 getBoundingClientRect() 与渲染坐标
+  // 不一致（Chromium 已知 bug），导致道路道具/遭遇贴图/丢球动画错位；html 级 zoom 等价
+  // 浏览器页面缩放。
   const consoleEl = document.querySelector('.console');
   if (consoleEl && !window.__TAURI__?.core?.invoke && !window.__POKEIDLE_MOBILE__?.isMobile) {
     document.body.classList.add('browser-mode');
+    // 移动端与桌面端浏览器对 CSS zoom 的 getBoundingClientRect 行为不一致：
+    // 桌面 Chromium 返回缩放后坐标（现有代码按此补偿），部分移动浏览器（尤其 iOS Safari）
+    // 返回未缩放坐标，导致基于 rect 差值定位的战斗贴图/道路道具/遭遇图标双重补偿错位。
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile|mobile/i.test(navigator.userAgent);
+    if (isMobile) {
+      // 移动端改用 transform: scale：canvas 保持逻辑尺寸绘制、由 GPU 合成缩放，不额外增加
+      // 重绘开销（zoom 在移动端会强制整页按放大尺寸重绘，拖慢滚动）
+      let _scale = 1;
+      const fitConsole = () => {
+        const vw = window.visualViewport?.width || window.innerWidth;
+        const vh = window.visualViewport?.height || window.innerHeight;
+        _scale = Math.max(1, Math.min(vw / 274, vh / 342));
+        consoleEl.style.transform = `scale(${_scale})`;
+      };
+      fitConsole();
+      window.addEventListener('resize', fitConsole);
+      window.visualViewport?.addEventListener('resize', fitConsole);
+
+      // transform: scale 是纯视觉变换：getBoundingClientRect 返回缩放后（物理）坐标，
+      // 而 style.left/top 赋值是逻辑值（渲染时再 ×scale）。与桌面 zoom 分支的 /zoom 补偿
+      // 同理，这里对 console 内元素统一除以 scale 还原逻辑坐标，避免遭遇贴图/道路道具/
+      // 事件 icon 双重缩放错位（真机 UA 走本分支，F12 缩小窗口走 zoom 分支故两者表现不同）
+      const _origGetBRC = Element.prototype.getBoundingClientRect;
+      Element.prototype.getBoundingClientRect = function () {
+        const r = _origGetBRC.call(this);
+        if (_scale === 1 || !consoleEl.contains(this)) return r;
+        return new DOMRect(r.left / _scale, r.top / _scale, r.width / _scale, r.height / _scale);
+      };
+    } else {
+      // 宽屏取高为限（上下贴边），窄屏取宽为限（左右贴边）；窗口不足基准尺寸时保持 100%
+      const fitConsole = () => {
+        const scale = Math.max(1, Math.min(innerWidth / 274, innerHeight / 342));
+        document.documentElement.style.zoom = scale;
+      };
+      fitConsole();
+      window.addEventListener('resize', fitConsole);
+
+      // CSS zoom 是布局缩放：getBoundingClientRect 返回的是缩放后坐标，而 style.left/top 赋值
+      // 在渲染时还会被 zoom 再放大一次，导致战斗贴图/道具/遭遇 icon 双重缩放错位。Tauri 端
+      // 用 WebView2 页面缩放（Browser Zoom），getBoundingClientRect 始终返回逻辑 CSS 像素。
+      // 这里把返回值统一除以 zoom，还原成与 Tauri 端一致的行为（动画/特效坐标全部对齐）。
+      const _origGetBRC = Element.prototype.getBoundingClientRect;
+      Element.prototype.getBoundingClientRect = function () {
+        const r = _origGetBRC.call(this);
+        const z = parseFloat(document.documentElement.style.zoom) || 1;
+        if (z === 1) return r;
+        return new DOMRect(r.left / z, r.top / z, r.width / z, r.height / z);
+      };
+    }
   }
 
   // 系统托盘走路动画（异步加载，失败不影响主流程）
@@ -648,6 +787,8 @@ async function init() {
   gameData.background = normalizeBackgroundState(gameData.background);
   // 应用存档中的窗口倍率（未设置时默认 2 倍）
   applyWindowScale(gameData?.settings?.windowScale);
+  // 应用夜间模式
+  if (gameData.settings?.darkMode) document.documentElement.dataset.theme = 'dark';
   ensureGpsState(); // 初始化 GPS 状态（默认从丰缘出发）
   if (gameData.gps.roamEnabled && gameData.gps.destIdx == null) setRoamEnabled(true);
   if (!gameData.achievements) gameData.achievements = {}; // 旧存档补齐成就进度
@@ -681,190 +822,8 @@ async function init() {
   setLastRegionId(getCurrentRegion().id);
   await saveGame();
 
-  // 调试辅助：DevTools 控制台快速增加糖果
-  window.__addCandy = (n = 1000) => {
-    const amount = Number(n) || 1000;
-    gameData.items['candy'] = (gameData.items['candy'] || 0) + amount;
-    gameData.stats.totalItemsEarned = gameData.stats.totalItemsEarned || {};
-    gameData.stats.totalItemsEarned.candy = (gameData.stats.totalItemsEarned.candy || 0) + amount;
-    saveGame();
-    updateBackpack('candy');
-    updateStats();
-    console.log('糖果 +' + amount);
-  };
-
-  // 调试辅助：DevTools 控制台快速完成所有孵蛋
-  window.__completeAllEggs = () => {
-    gameData.incubators.forEach(s => {
-      if (s && s.eggIndex != null && !s.hatched) {
-        s.hatched = true;
-      }
-    });
-    saveGame();
-    if ($('incubatorView')?.style.display === 'flex') renderIncubatorView();
-    updateIncubatorBadge();
-    console.log('所有孵蛋中的蛋已标记为孵化完成');
-  };
-
-  // 调试辅助：DevTools 控制台一键让农场所有已种植地块成熟（window.__matureBerries()）
-  window.__matureBerries = () => {
-    const f = gameData.berryFarm;
-    if (!f || !Array.isArray(f.plots)) { console.warn('__matureBerries: 尚未开启农场'); return; }
-    let n = 0;
-    f.plots.forEach(p => {
-      if (!p) return;
-      p.grownMs = p.totalMs || 30 * 60 * 1000; // 生长进度直接拉满，进入「可收获」
-      n++;
-    });
-    if (!n) { console.warn('__matureBerries: 农场没有已种植的树果'); return; }
-    saveGame();
-    refreshBerryView();
-    console.log(`__matureBerries: ${n} 棵树果已成熟，可以收获了`);
-  };
-
-  // 调试辅助：DevTools 控制台清空当前 GPS 状态，恢复为默认丰缘（含默认漫游自动规划首站）
-  window.__resetGps = async () => {
-    gameData.gps = defaultGpsState();
-    ensureGpsState();
-    setRoamEnabled(true); // 默认开启漫游：无目的地时自动规划首站路线
-    setLastRegionId(getCurrentRegion().id);
-    await saveGame();
-    updateStats();
-    if ($('gpsView')?.style.display === 'flex') showGpsView();
-    console.log('GPS 已重置为默认丰缘');
-  };
-
-  // 调试辅助：一键刷新大量出没事件（清掉当前事件并立即生成一次新事件）
-  window.__resetMassOutbreak = () => {
-    forceRefreshMassOutbreak();
-    if ($('gpsView')?.style.display === 'flex') showGpsView();
-    const mo = gameData.massOutbreak;
-    if (mo) {
-      const poke = getPokemonByIndex(mo.pokemon);
-      console.log(`大量出没已刷新：${poke ? poke.name : '#' + mo.pokemon}，剩余 ${mo.remain} 只，路段 ${mo.edge.join('-')} @ ${(mo.t * 100).toFixed(0)}%`);
-    } else {
-      console.warn('大量出没刷新失败：暂无可生成的宝可梦，1 秒后自动重试');
-    }
-  };
-
-  // 调试辅助：一键刷新时空扭曲事件并直接传送到事件点（清掉当前事件、立即生成新事件、瞬移过去）
-  window.__resetTwist = () => {
-    forceRefreshTwist();
-    const tw = gameData.twist;
-    if (tw) {
-      teleportToTwist();
-      console.log(`时空扭曲已刷新并传送：剩余 ${tw.remain} 只，路段 ${tw.edge.join('-')} @ ${(tw.t * 100).toFixed(0)}%`);
-    } else {
-      console.warn('时空扭曲刷新失败：暂无可生成的宝可梦，1 秒后自动重试');
-    }
-  };
-
-  // 调试：按宝可梦编号直接写入一只 6V 孵蛋宝可梦（如 window.__addPoke(25) 写入皮卡丘）
-  // 默认 Lv10（调试状态异常等招式时等级太低学不到招式）；__addPokeLv 可指定等级
-  // __addShinyPoke 相同，但为蛋闪
-  async function addDebugPoke(idx, shiny, level = 10) {
-    // 纯数字按 4 位编号补零；扩展编号（如 "0058-1"）原样匹配
-    const raw = String(idx);
-    const dexIdx = /^\d+$/.test(raw) ? raw.padStart(4, '0') : raw;
-    const poke = getPokemonByIndex(dexIdx);
-    if (!poke) { console.warn(`__addPoke: 未找到编号 ${idx}`); return null; }
-    const entry = addRosterEntry({ species: poke.index, source: 'egg', shiny, level });
-    if (entry) entry.ivs = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 };
-    // 同步解锁图鉴（与孵蛋流程一致）
-    const pdx = String(poke.index);
-    if (!gameData.pokedex[pdx]) {
-      gameData.pokedex[pdx] = { seen: 0, caught: 0, lastTime: null, shinySeen: 0, shinyCaught: 0 };
-    }
-    gameData.pokedex[pdx].seen++;
-    gameData.pokedex[pdx].caught = (gameData.pokedex[pdx].caught || 0) + 1;
-    gameData.pokedex[pdx].lastTime = new Date().toISOString();
-    if (shiny) {
-      gameData.pokedex[pdx].shinyCaught = (gameData.pokedex[pdx].shinyCaught || 0) + 1;
-      gameData.stats.totalShinyEggsHatched = (gameData.stats.totalShinyEggsHatched || 0) + 1;
-    }
-    gameData.stats.totalCatches++;
-    gameData.stats.totalEggsHatched++;
-    // 配套写一条「孵蛋获得」遭遇日志，详情页的日志行才有内容
-    if (!gameData.encounterLogs) gameData.encounterLogs = {};
-    if (!gameData.encounterLogs[poke.index]) gameData.encounterLogs[poke.index] = [];
-    gameData.encounterLogs[poke.index].push({
-      time: Date.now(),
-      shiny,
-      result: 'caught',
-      balls: {},
-      charmBuff: false,
-      score: computeObtainScore({ pokemon: poke, source: 'egg', shiny, charmBuff: false, honeyBuff: false, balls: {}, finalRate: 1, ivs: entry.ivs }),
-    });
-    await saveGame();
-    if (isRosterInDetail()) restoreRosterList();
-    else if ($('rosterView')?.style.display === 'flex') showRosterView();
-    console.log(`__addPoke: 已添加 6V Lv${level} ${shiny ? '闪光 ' : ''}${poke.name}（${shiny ? '蛋闪' : '孵蛋'}）`);
-    return entry;
-  }
-  window.__addPoke = idx => addDebugPoke(idx, false);
-  window.__addShinyPoke = idx => addDebugPoke(idx, true);
-  window.__addPokeLv = (idx, lv) => addDebugPoke(idx, false, lv);
-  window.__addShinyPokeLv = (idx, lv) => addDebugPoke(idx, true, lv);
-
-  // 调试辅助：一键解锁全图鉴（含变体）。
-  // window.__unlockAllPokedex() 全解锁普通记录；传 true 时额外把闪光也标记为已见/已捕获
-  window.__unlockAllPokedex = async (withShiny = false) => {
-    if (!gameData.pokedex) gameData.pokedex = {};
-    const now = new Date().toISOString();
-    let n = 0;
-    for (const poke of allPokemon) {
-      const key = String(poke.index);
-      const rec = gameData.pokedex[key] || { seen: 0, caught: 0, lastTime: null, shinySeen: 0, shinyCaught: 0 };
-      rec.seen = Math.max(rec.seen, 1);
-      rec.caught = Math.max(rec.caught, 1);
-      rec.lastTime = now;
-      if (withShiny) {
-        rec.shinySeen = Math.max(rec.shinySeen, 1);
-        rec.shinyCaught = Math.max(rec.shinyCaught, 1);
-      }
-      gameData.pokedex[key] = rec;
-      n++;
-    }
-    await saveGame();
-    if ($('pokedexView')?.style.display !== 'none') showPokedex();
-    console.log(`__unlockAllPokedex: 已解锁 ${n} 条图鉴记录${withShiny ? '（含闪光）' : ''}`);
-    return n;
-  };
-
-  // 调试辅助：指定下一次遇敌的宝可梦（window.__nextEncounter(25) 下次遇皮卡丘；
-  // window.__nextEncounter(25, true) 下次遇闪光皮卡丘；遇到后自动清空）
-  window.__nextEncounter = (idx, shiny = false) => {
-    setDebugNextEncounter(idx, shiny);
-    const raw = String(idx);
-    const dexIdx = /^\d+$/.test(raw) ? raw.padStart(4, '0') : raw;
-    const poke = getPokemonByIndex(dexIdx);
-    console.log(`__nextEncounter: 下次遇敌已指定为 ${poke ? poke.name : '#' + idx}${shiny ? '（闪光）' : ''}，用后即焚`);
-  };
-
-  // 调试辅助：同时刷新对战与交换（重置各自倒计时并立即换新一波；页面正打开则同步重绘）
-  window.__refreshBattleAndTrade = () => {
-    refreshNpcs();
-    refreshTrades();
-    if ($('battleView')?.style.display !== 'none' && !isBattleActive()) renderBattleList();
-    if ($('tradeView')?.style.display !== 'none') renderTrade();
-    console.log('对战与交换已刷新');
-  };
-
-  // 调试辅助：刷新一波对战 NPC，并让全部 NPC 的队伍都使用指定的宝可梦
-  // 用法：window.__npcTeam(25) 全部用皮卡丘；window.__npcTeam(25, 6, 149) 全部用这三只；也支持传数组
-  window.__npcTeam = (...ids) => {
-    const list = ids.length === 1 && Array.isArray(ids[0]) ? ids[0] : ids;
-    const mons = list.map((v) => String(v).padStart(4, '0'));
-    const bad = mons.filter((idx) => !getPokemonByIndex(idx));
-    if (!mons.length || bad.length) {
-      console.warn(`__npcTeam: 无效编号 ${bad.join(', ')}，用法如 __npcTeam(25, 6)`);
-      return;
-    }
-    refreshNpcs(); // 生成新一波并重置刷新倒计时
-    gameData.battleNpcs.list.forEach((n) => { n.mons = [...mons]; });
-    if ($('battleView')?.style.display !== 'none' && !isBattleActive()) renderBattleList();
-    console.log(`__npcTeam: 对战 NPC 已刷新，全部队伍=${mons.join(', ')}`);
-  };
+  // 调试命令统一在 debug.js 中登记（F12 控制台 window.__* 系列）
+  await import('./debug.js');
 
   // 固定窗口
   if (gameData.settings?.windowPinned) {
@@ -1299,8 +1258,15 @@ async function init() {
   $('statTime')?.addEventListener('click', footerNav(showGpsView));
   // 标题栏返回逻辑：点击 appTitle 与鼠标后侧键（button 4）共用
   const handleAppTitleBack = () => {
-    if (isModalLocked()) return; // 全屏确认场景锁定：标题返回也不处理，只能通过场景内确定退出（派遣结算确定=返回）
     if ($('appTitle').dataset.action !== 'back') return;
+    // 经验糖果使用场景尚未结算时：返回 = 取消并关闭场景（结算后只能点「确定」退出，标题返回维持锁定）
+    if ($('expCandyView')?.style.display === 'flex' && $('expCandyBox')?.style.display !== 'flex') {
+      import('./exp-candy.js').then(m => m.cancelExpCandyScene());
+      return;
+    }
+    if (isModalLocked() && !(isBatchReleasing() && $('rosterView')?.style.display === 'flex')) return; // 全屏确认场景锁定：标题返回也不处理，只能通过场景内确定退出（派遣结算确定=返回）；批量放生除外——其本身由 isModalLocked 锁定，但点标题应直接取消批量放生
+    // 批量放生模式：点击标题 = 取消批量放生（留在仓库列表）
+    if (isBatchReleasing() && $('rosterView')?.style.display === 'flex') { cancelBatchRelease(); return; }
     // 孵蛋记录页打开且正处孵蛋器视图：点击标题只关记录页回主列表，否则走正常返回
     if (isIncubatorLogOpen() && $('incubatorView')?.style.display === 'flex') { closeIncubatorLog(); return; }
     // 对战记录页打开且正处战斗视图：点击标题只关记录页，否则走正常返回
@@ -1478,6 +1444,22 @@ async function init() {
     }
     try { localStorage.setItem('pokemon_idle_road', JSON.stringify({ roadIdx: _roadIdx, fished: getFishingGuarantee().fished })); } catch (_) {}
   });
+
+  // 浏览器最小化/切后台：记账 + 立即结算进行中的遭遇——遭遇中的自动丢球由 showEncounter 的
+  // 1.5s 定时器触发，该定时器会被浏览器冻结导致画面卡住；切后台立即启动后台快速结算。
+  // 记账/开关统一收敛在 background-catchup.js，此处只注入运行依赖
+  initBackgroundCatchup({
+    isIdleRoadActive: () => phase === 'idle' && road.isActive(),
+    isBike: () => road.isBike(),
+    buffRemaining: () => {
+      let ms = 0;
+      if (honeyBuffActive && honeyCountdownEnd > Date.now()) ms = Math.max(ms, honeyCountdownEnd - Date.now());
+      if (charmBuffActive && charmCountdownEnd > Date.now()) ms = Math.max(ms, charmCountdownEnd - Date.now());
+      return ms;
+    },
+    onHidden: () => settleEncounterForBackground(),
+  });
+  startBackgroundCatchup();
 }
 
 // 启动画面落位：旋转结束后道具依次飞向各自对应的背包槽位/糖果计数

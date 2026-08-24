@@ -4,9 +4,9 @@
 // 得到的宝可梦来源记为「交换」。
 import { TRADE_COUNT, TRADE_REFRESH_MS, TRADE_GENDER_CHANCE, TRADE_IV_CHANCE, TRADE_IV_MIN, TRADE_SHINY_CHANCE, TRADE_IV_SUM_MIN, TRADE_LEVEL_CHANCE, TRADE_WANT_LEVEL_MIN, TRADE_WANT_LEVEL_MAX, TRADE_GIVE_LEVEL_MAX, EXP_CANDY_XP, MAX_LEVEL } from './config.js';
 import { gameData, allPokemon, getPokemonByIndex, getNature, pushNav, saveGame, addSystemLog, randInt, rollIvs, rollLegendIvs, rollNature, rollGender, addRosterEntry, setLastObtainedEntryId, ensureGender, genderBadge, isPokemon } from './state.js';
-import { $, showView, updateStats, tryLoadImage, tryLoadPokemonImage } from './ui.js';
+import { $, showView, updateStats, tryLoadImage, tryLoadPokemonImage, logicViewport } from './ui.js';
 import { showGoodbyeConfirm, showTradeReceive, startShinySparkleOn, stopShinySparkleLoop } from './animation.js';
-import { TYPE_COLORS, pickFamily } from './items.js';
+import { TYPE_COLORS, pickFamily, pokemonSourceBadge } from './items.js';
 import { NATURES } from './battle-core.js';
 import { playCongratulation } from './audio.js';
 
@@ -401,7 +401,7 @@ function ivHexagon(ivs) {
   const data = IV_KEYS.map((k, i) => pt(i, (ivs[k] || 0) / 31).map(n => n.toFixed(1)).join(',')).join(' ');
   const axes = IV_KEYS.map((_, i) => {
     const [x, y] = pt(i, 1);
-    return `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(48,98,48,0.15)" stroke-width="0.5"/>`;
+    return `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(var(--ui-color-rgb),0.15)" stroke-width="0.5"/>`;
   }).join('');
   const labels = IV_KEYS.map((k, i) => {
     const [x, y] = pt(i, 1.32);
@@ -412,11 +412,11 @@ function ivHexagon(ivs) {
     return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.7" fill="var(--ui-color)"/>`;
   }).join('');
   return `<svg viewBox="0 0 100 100" class="roster-hex">
-    <polygon points="${poly(0.34)}" fill="none" stroke="rgba(48,98,48,0.18)" stroke-width="0.5"/>
-    <polygon points="${poly(0.67)}" fill="none" stroke="rgba(48,98,48,0.18)" stroke-width="0.5"/>
-    <polygon points="${poly(1)}" fill="none" stroke="rgba(48,98,48,0.18)" stroke-width="0.5"/>
+    <polygon points="${poly(0.34)}" fill="none" stroke="rgba(var(--ui-color-rgb),0.18)" stroke-width="0.5"/>
+    <polygon points="${poly(0.67)}" fill="none" stroke="rgba(var(--ui-color-rgb),0.18)" stroke-width="0.5"/>
+    <polygon points="${poly(1)}" fill="none" stroke="rgba(var(--ui-color-rgb),0.18)" stroke-width="0.5"/>
     ${axes}
-    <polygon points="${data}" fill="rgba(48,98,48,0.22)" stroke="var(--ui-color)" stroke-width="1.2"/>
+    <polygon points="${data}" fill="rgba(var(--ui-color-rgb),0.22)" stroke="var(--ui-color)" stroke-width="1.2"/>
     ${dots}
     ${labels}
   </svg>`;
@@ -530,7 +530,7 @@ function renderSelect(content, offerId) {
         return `
         <div class="pokedex-entry roster-row bounty-trade-row" data-trade-view="${p.id}">
           <span class="roster-icon"><img class="roster-icon-img" data-trade-icon="${p.id}" alt="" /></span>
-          <span class="pokedex-star">${p.shiny ? '★' : ''}</span>
+          <span class="pokedex-star">${pokemonSourceBadge(p)}</span>
           <span class="roster-ivs">${ivsText}</span>
           <span class="roster-nature">${genderBadge(ensureGender(p))}Lv${p.level || 1}</span>
           <span class="bounty-trade-btn-col"><button class="bounty-trade-btn" data-trade-submit="${p.id}">交换</button></span>
@@ -708,8 +708,9 @@ function showTradeContextMenu(ignored, offerId, x, y) {
   menu.innerHTML = `<div class="shop-ctx-item" data-ctx-offer="${offerId}">${ignored ? '恢复红点提醒' : '忽略此交换'}</div>`;
   menu.style.display = '';
   const mw = menu.offsetWidth, mh = menu.offsetHeight;
-  menu.style.left = Math.max(0, Math.min(x - 24, window.innerWidth - mw - 4)) + 'px';
-  menu.style.top = Math.max(0, Math.min(y, window.innerHeight - mh - 4)) + 'px';
+  const { x: lx, y: ly, w: vw, h: vh } = logicViewport(x, y); // zoom 下还原逻辑坐标
+  menu.style.left = Math.max(0, Math.min(lx - 24, vw - mw - 4)) + 'px';
+  menu.style.top = Math.max(0, Math.min(ly, vh - mh - 4)) + 'px';
   // 菜单内点击不触发外部关闭；点击外部任意位置关闭
   menu.addEventListener('pointerdown', (e) => e.stopPropagation());
   menu.onclick = (e) => {

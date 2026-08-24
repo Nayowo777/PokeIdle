@@ -4,7 +4,7 @@
 import { $, showView, tryLoadImage, setupFoodTooltip, showConfirmBar, hideConfirmBar } from './ui.js';
 import { gameData, getPokemonByIndex, isPokemon, saveGame, pushNav, ensureGender, genderBadge, rollGender, rollNature, addSystemLog } from './state.js';
 import { matchPinyinPartial } from './pokedex.js';
-import { BERRY_ICONS, BERRY_NAMES, TYPE_COLORS } from './items.js';
+import { BERRY_ICONS, BERRY_NAMES, TYPE_COLORS, pokemonSourceBadge } from './items.js';
 import { ensureBerryFarm } from './berry.js';
 import { removePokemonFromAllTeams } from './team.js';
 import { REGION_CYCLE } from './config.js';
@@ -242,7 +242,7 @@ function removeParent(slot) {
 }
 
 // ---------- 页面渲染 ----------
-function render() {
+export function render() {
   const box = $('nurseryContent');
   if (!box) return;
   // 蛋仓库视图
@@ -947,7 +947,9 @@ function pickPickRows() {
       const poke = getPokemonByIndex(String(p.species));
       if (!poke) return true;
       const upper = q.toUpperCase();
-      return poke.name.includes(q) ||
+      return String(p.species).includes(q) ||   // 图鉴编号直接匹配
+        poke.name.includes(q) ||
+        (poke.form || '').includes(q) ||
         (poke.pinyin || '').toUpperCase().includes(upper) ||
         (poke.pinyinInitials || '').toUpperCase().includes(upper) ||
         matchPinyinPartial(q, poke.pinyin) ||
@@ -986,7 +988,7 @@ function pickRowHtml(p) {
   return `
   <div class="pokedex-entry roster-row bounty-trade-row" data-pick-view="${p.id}">
     <span class="roster-icon">${icon}</span>
-    <span class="pokedex-star">${p.shiny ? '★' : ''}</span>
+    <span class="pokedex-star">${pokemonSourceBadge(p)}</span>
     <span class="pokedex-name">${name}</span>
     <span class="roster-lv-col">${genderBadge(ensureGender(p))}Lv${p.level || 1}</span>
     <span class="roster-iv" data-tip="${pickIvTip(p)}">${pickIvSum(p)}</span>
@@ -1041,13 +1043,10 @@ function slotHtml(slot, i) {
   const st = breedingState(ensureNursery());
   const tip = st.key === 'running' ? '繁殖中，取出将终止剩余轮次（树果不退）'
     : st.key === 'done' ? '本轮繁殖完成，取出后可开始新一批' : '点击取出';
-  const shiny = entry.shiny
-    ? '<svg viewBox="0 0 1024 1024" width="10" height="10" style="flex-shrink:0;color:var(--ui-color);vertical-align:-1px;"><use xlink:href="#icon-star"/></svg>'
-    : '';
   return `<div class="nursery-slot" data-slot="${i}" title="${tip}">
     <img class="nursery-slot-icon" data-icon="${entry.species}" alt="">
     <div class="nursery-slot-info">
-      <div class="nursery-slot-name">${_confirmTakeSlot === i ? '再次点击取出' : `${name}${shiny}<em>${genderBadge(ensureGender(entry))}</em>`}</div>
+      <div class="nursery-slot-name">${_confirmTakeSlot === i ? '再次点击取出' : `${name}<em>${genderBadge(ensureGender(entry))}</em>`}</div>
       <div class="nursery-slot-egg">${egg}</div>
     </div>
   </div>`;
@@ -1136,10 +1135,9 @@ function ivSlash(ivs) {
     .join('/');
 }
 
-// 后代个体值预览（同一配对结果稳定，仅展示用）：按遗传规则——6 项中 5 项继承双亲、
+// 后代个体值预览数据（同一配对结果稳定，仅展示用）：按遗传规则——6 项中 5 项继承双亲、
 // 1 项随机。锁定位固定继承所选亲本（定值），其余随机遗传位二选一、纯随机位 0~31。
-// 用双亲 id 做种子仅决定「纯随机位是哪一项」，实际孵化以产蛋/孵化为准。
-// 返回 { lockVal, lockKey, randomKeys, ea, eb } 供区间化展示。
+// 实际孵化以产蛋/孵化为准，这里仅产出区间供 previewIvCells 展示。
 function previewChildIvs(ea, eb, lockedIv) {
   const keys = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'];
   let seed = 2166136261;
@@ -1162,29 +1160,49 @@ function previewChildIvs(ea, eb, lockedIv) {
   }
   // 剩余继承名额（锁定 1 项则再随机继承 4 项；不锁定则随机继承 5 项）
   while (inherits.size < 5) inherits.add(Math.floor(rnd() * keys.length));
-  // 未继承项 = 纯随机位（恰好 1 个）
-  const randomKeys = keys.filter((_, i) => !inherits.has(i));
-  return { lockVal, lockKey, randomKeys, ea, eb };
+  return { lockVal, lockKey, ea, eb };
 }
 
-// 预览区间格：锁定位显示定值（标注锁定），随机遗传位显示 min~max，纯随机位显示 0~31
+// 预览区间格：锁定位显示定值（标注锁定），随机遗传位显示 min~max，纯随机位显示 0~31。
+// 纯随机项在实机每次孵化都轮换落点：渲染时由全局 npvRot 决定哪格显示 0~31（锁定位除外），
+// npvRotateTimer 每 700ms 递增，重建/即时刷新都跟随同一计数器，避免固定点名一格造成误导。
+let npvRot = 0;
 function previewIvCells(p) {
   const dims = { hp: 'HP', atk: '物攻', def: '物防', spa: '特攻', spd: '特防', spe: '速度' };
-  return ['hp', 'atk', 'def', 'spa', 'spd', 'spe'].map(k => {
-    let range, cls = '';
+  const keys = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'];
+  const rotKeys = keys.filter(k => p.lockKey !== k); // 轮转仅限非锁定位
+  const rotDim = rotKeys[npvRot % rotKeys.length]; // 当前 0~31 标记落点
+  return keys.map(k => {
+    let base, cls = '', rot = ' npv-rot';
     if (p.lockKey === k) {
-      range = String(p.lockVal[k]); // 锁定位：定值，仅加粗区分
+      base = String(p.lockVal[k]); // 锁定位：定值，仅加粗区分
       cls = ' locked';
-    } else if (p.randomKeys.includes(k)) {
-      range = '0~31'; // 纯随机位：完全随机
+      rot = '';
     } else {
       const va = p.ea.ivs && p.ea.ivs[k] != null ? p.ea.ivs[k] : 0;
       const vb = p.eb.ivs && p.eb.ivs[k] != null ? p.eb.ivs[k] : 0;
-      range = `${Math.min(va, vb)}~${Math.max(va, vb)}`; // 随机遗传位：二选一 → 双亲范围
+      base = `${Math.min(va, vb)}~${Math.max(va, vb)}`; // 遗传位区间（含纯随机位的双亲范围）
+      if (k === rotDim) cls = ' rot-on'; // 轮到的这项显示 0~31
     }
-    return `<div class="npv-cell"><span class="npv-dim">${dims[k]}</span><span class="npv-range${cls}">${range}</span></div>`;
+    const show = k === rotDim ? '0~31' : base;
+    return `<div class="npv-cell${rot}"><span class="npv-dim">${dims[k]}</span><span class="npv-range${cls}" data-base="${base}">${show}</span></div>`;
   }).join('');
 }
+
+// 轮转「0~31」标记：每 700ms 前移到下一非锁定位，同步已渲染面板（含被 refreshBoard 重建后的格子）
+const npvRotateTimer = setInterval(() => {
+  npvRot++;
+  document.querySelectorAll('.nursery-pair-preview').forEach(container => {
+    const cells = container.querySelectorAll('.npv-rot .npv-range');
+    if (!cells.length) return;
+    const idx = npvRot % cells.length;
+    cells.forEach((s, j) => {
+      const on = j === idx;
+      s.textContent = on ? '0~31' : s.dataset.base;
+      s.classList.toggle('rot-on', on);
+    });
+  });
+}, 700);
 
 // ---------- M2 投喂与产蛋 ----------
 // 繁殖状态机：breeding 为 null 未繁殖；否则按时间判定 繁殖中 / 全部完成。
@@ -1311,7 +1329,7 @@ function startBreeding() {
 // 结算已完成轮次：每完成一轮自动生成蛋入库存并继续下一轮，直至全部完成。
 // 用真实时间戳结算，离开页面/离线期间产出的蛋在进入页面时一次性补齐。
 // 返回本次结算产出的蛋数（供进入饲育屋页面时弹出提示）。
-function settleBreeding() {
+export function settleBreeding() {
   const n = ensureNursery();
   const b = n.breeding;
   if (!b) return 0;
@@ -1620,7 +1638,7 @@ function removeEggConfirmBar() {
   hideConfirmBar();
 }
 
-function renderEggView() {
+export function renderEggView() {
   const box = $('nurseryContent');
   if (!box) return;
   const eggs = (gameData.roster || []).filter(p => p.inRoster && !isPokemon(p));
@@ -1631,7 +1649,8 @@ function renderEggView() {
     filtered = eggs.filter(p => {
       const poke = getPokemonByIndex(String(p.species));
       if (!poke) return false;
-      return poke.name.includes(q) || poke.pinyin?.toUpperCase().includes(q.toUpperCase()) ||
+      return poke.name.includes(q) || (poke.form || '').includes(q) ||
+        poke.pinyin?.toUpperCase().includes(q.toUpperCase()) ||
         poke.pinyinInitials?.toUpperCase().includes(q.toUpperCase());
     });
   }
@@ -1796,52 +1815,3 @@ export function leaveNurseryEggView() {
   render();
   startTimer();
 }
-
-// ---------- 调试辅助 ----------
-// 直接完成当前繁殖批次：跳过投喂树果消耗与等待计时，立即产完本批所有蛋（自动入库）。
-// 控制台执行 window.__finishBreeding()。
-window.__finishBreeding = function () {
-  const n = ensureNursery();
-  if (!n || !n.breeding) {
-    console.log('[调试] 当前没有进行中的繁殖（需先投喂开始繁殖）');
-    return false;
-  }
-  n.breeding.startedAt = Date.now() - (n.breeding.durMs || 1) * n.breeding.roundsTotal - 1;
-  const produced = settleBreeding();
-  saveGame();
-  render();
-  console.log(`[调试] 已直接完成当前繁殖，${produced} 枚蛋已自动入库`);
-  return true;
-};
-
-// 调试：直接添加宝可梦蛋到仓库（6V 个体值）
-// 参数 speciesIndex 为图鉴编号，默认为 1（妙蛙种子）
-// 用法：__addEgg(25)  → 获得一只皮卡丘的蛋
-//       __addEgg()    → 获得一只妙蛙种子的蛋
-window.__addEgg = function (speciesIndex) {
-  const species = String(speciesIndex || 1).padStart(4, '0');
-  const poke = getPokemonByIndex(species);
-  if (!poke) { console.log('[调试] 无效的图鉴编号:', species); return false; }
-  if (!Array.isArray(gameData.roster)) gameData.roster = [];
-  const ivs = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 };
-  const entry = {
-    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
-    kind: 'egg',
-    species,
-    gender: rollGender(species),
-    level: 1,
-    exp: 0,
-    evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
-    ivs,
-    nature: rollNature(),
-    shiny: false,
-    source: 'egg',
-    obtainedAt: Date.now(),
-    inRoster: true,
-  };
-  gameData.roster.push(entry);
-  saveGame();
-  if (_eggView) renderEggView();
-  console.log(`[调试] 已添加 ${poke.name} 的蛋（6V），可在「饲育屋→纸箱」或「孵蛋器→宝可梦蛋」中查看`);
-  return true;
-};
