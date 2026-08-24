@@ -70,6 +70,7 @@ test('进入后台时记录普通道路道具快照并排除非步行状态', as
   assert.match(main, /!isFishingPending\(\)/);
   assert.match(main, /!inMassZone\(\)/);
   assert.match(main, /!inTwistZone\(\)/);
+  assert.match(main, /!gameData\.gps\?\.massTarget/);
   assert.match(main, /!road\.isTransitioning\(\)/);
   assert.match(main, /background\.walkingEnabled\s*=\s*gameData\.background\.roadItemsEnabled/);
   assert.match(main, /background\.walkPxPerSecond\s*=\s*gameData\.background\.walkingEnabled/);

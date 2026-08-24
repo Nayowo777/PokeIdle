@@ -1386,6 +1386,7 @@ async function init() {
       && !isFishingPending()
       && !inMassZone()
       && !inTwistZone()
+      && !gameData.gps?.massTarget
       && !road.isTransitioning();
     gameData.background.walkingEnabled = gameData.background.roadItemsEnabled;
     gameData.background.walkPxPerSecond = gameData.background.walkingEnabled

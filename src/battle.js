@@ -21,6 +21,14 @@ import { continueGpsRoam, getGpsSegmentPx } from './gps.js';
 
 let _backgroundSettlementQueue = Promise.resolve();
 
+function backgroundHatchMultiplier(gameData, at) {
+  const follower = gameData?.follower;
+  if (!follower || !Array.isArray(follower.groups) || !follower.groups.includes('hatch')) return 1;
+  if (!Number.isFinite(follower.endsAt) || follower.endsAt <= at) return 1;
+  const boost = Number.isFinite(follower.boost) && follower.boost > 0 ? follower.boost : 0;
+  return Math.max(0, 1 - boost);
+}
+
 export function settleBackgroundEncounters(now = Date.now()) {
   const operation = _backgroundSettlementQueue.catch(() => {}).then(async () => {
     if (!gameData?.background?.enabled) return { encounters: 0, results: [] };
@@ -57,7 +65,7 @@ export function settleBackgroundEncounters(now = Date.now()) {
           next.gameData.gps = gps.state;
           const hatch = settleIncubatorProgress(next.gameData, {
             walkDistance: next.gameData.stats.walkDistance,
-            hatchMultiplier: 1,
+            hatchMultiplier: backgroundHatchMultiplier(next.gameData, to),
           });
           next.gameData = hatch.gameData;
         }
