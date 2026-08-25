@@ -97,6 +97,21 @@ export function createSavePlatform({
       return storage.getItem(IMPORT_BACKUP_KEY);
     },
 
+    async selectSharedSaveDirectory() {
+      if (!mobile?.selectSharedSaveDirectory) return null;
+      return mobile.selectSharedSaveDirectory();
+    },
+
+    async readSharedSaveData() {
+      if (!mobile?.readSharedSaveData) return null;
+      return mobile.readSharedSaveData();
+    },
+
+    async writeSharedSaveData(data, fileName = 'pokeidle-save.json') {
+      if (!mobile?.writeSharedSaveData) return null;
+      return mobile.writeSharedSaveData(data, fileName);
+    },
+
     async getAppVersion() {
       if (mobile?.getAppVersion) return mobile.getAppVersion();
       if (tauri?.app?.getVersion) return tauri.app.getVersion();

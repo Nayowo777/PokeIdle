@@ -40,6 +40,21 @@ const mobileBridge = {
     return result?.data ?? null;
   },
 
+  async selectSharedSaveDirectory() {
+    const result = await NativeSave.selectSharedSaveDirectory();
+    return result?.cancelled ? null : result;
+  },
+
+  async readSharedSaveData() {
+    return NativeSave.readSharedSaveData();
+  },
+
+  writeSharedSaveData(data, fileName = 'pokeidle-save.json') {
+    const operation = saveQueue.catch(() => {}).then(() => NativeSave.writeSharedSaveData({ data, fileName }));
+    saveQueue = operation;
+    return operation;
+  },
+
   async getAppVersion() {
     return (await App.getInfo()).version;
   },
@@ -114,6 +129,7 @@ App.addListener('appStateChange', ({ isActive }) => {
       .catch(() => {})
       .finally(() => backgroundMode.stopBackgroundMode().catch?.(() => {}));
     window.__POKEIDLE_AUDIO_RESUME__?.();
+    Promise.resolve(window.__POKEIDLE_SHARED_SAVE_CHECK__?.()).catch(() => {});
   } else {
     Promise.resolve(window.__POKEIDLE_BACKGROUND_ENTER__?.())
       .then(started => {

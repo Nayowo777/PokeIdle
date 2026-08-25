@@ -12,7 +12,7 @@ import { CANDY_EXCHANGE, ITEM_NAMES, ITEM_RATES, CATCH_RATES, CATCH_BONUS_INC, U
   GACHA_DRAW_COST, GACHA_DUP_REFUND, EXP_CANDY_XP, EXP_CANDY_DROP, RELEASE_XP_RATE,
   TRADE_LEVEL_CHANCE, TRADE_WANT_LEVEL_MIN, TRADE_WANT_LEVEL_MAX,
   FOLLOWER_DRAW_COST, FOLLOWER_TIER_CHANCE, FOLLOWER_TIER_DUR, FOLLOWER_TIER_BOOST, ITEM_SELL_RATE,
-  DISPATCH_DURATIONS, DISPATCH_DUR_MULT, DISPATCH_CANDY_PER_HOUR, DISPATCH_CANDY_JITTER, DISPATCH_VALUE_PER_HOUR, DISPATCH_SPEED_MIN, DISPATCH_SPEED_MAX, DISPATCH_FREE_SLOTS, DISPATCH_TYPE_BOOST, DISPATCH_VARIANT_CANDY_BONUS } from './config.js';
+  DISPATCH_DURATIONS, DISPATCH_DUR_MULT, DISPATCH_CANDY_PER_HOUR, DISPATCH_CANDY_JITTER, DISPATCH_VALUE_PER_HOUR, DISPATCH_SPEED_MIN, DISPATCH_SPEED_MAX, DISPATCH_FREE_SLOTS, DISPATCH_TYPE_BOOST, DISPATCH_VARIANT_CANDY_BONUS, DISPATCH_ITEM_VALUE } from './config.js';
 import { phase, gameData, allPokemon, getPokemonByIndex, getCurrentRegion, currentEncounter, currentIsShiny, honeyBuffActive, charmBuffActive, saveGame, addSystemLog, formatNum, pad, randInt, pushNav, setGameData, getDefaultSave, ensureGpsState, normalizeBackgroundState, _fishing } from './state.js';
 import { $, showView, updateTextBox, updateBackpack, updateStats, isOnGameView, applyCharSprites, showConfirmBar, logicViewport } from './ui.js';
 import { doCandyExchange, doSellBall, activateHoney, activateShinyCharm, ITEM_ICONS, BERRY_ICONS, BERRY_NAMES } from './items.js';
@@ -23,7 +23,7 @@ import { renderAchievements, refreshAchievements } from './achievements.js';
 import { TEAM_MAX } from './team.js';
 import { clearBattleTier } from './battle-view.js';
 import { createSavePlatform } from './save-platform.js';
-import { bindSaveTransferControls, refreshImportBackupState, showSaveTransferDialog } from './save-transfer-controller.js';
+import { bindSaveTransferControls, createSaveTransferController, formatSaveTransferError, refreshImportBackupState, showSaveTransferDialog } from './save-transfer-controller.js';
 
 // ===== 欧气综合评定 =====
 // 每场遭遇的欧气分（捕获用获得分 score，宝可梦挣脱逃跑用相遇分）取平均，映射到 9 档称号。
@@ -337,12 +337,12 @@ export function showAchievementView() {
 export function renderSystemLogs() {
   const logs = gameData.systemLogs || [];
   const sorted = [...logs].reverse();
-  // 日志只存宝可梦编号，名字从图鉴数据查表
+  // 日志只存宝可梦编号，名字从图鉴数据查表；有形态时显示全称。
   const logName = log => {
     const n = log.details?.pokemon;
     if (n == null) return log.details?.name || '';
     const p = getPokemonByIndex(n);
-    return p ? p.name : '#' + n;
+    return p ? (p.form || p.name) : '#' + n;
   };
 
   const content = $('systemLogContent');
@@ -807,6 +807,99 @@ document.addEventListener('pointerdown', (e) => {
   });
 });
 
+const SHARED_SAVE_SIGNATURE_KEY = 'pokeidle_shared_save_signature';
+let _saveTransferController = null;
+let _sharedSaveCheckBusy = false;
+
+function sharedSaveSignature(value) {
+  if (!value) return null;
+  return value.fingerprint || `${value.modifiedAt || 0}:${value.size || 0}`;
+}
+
+function rememberSharedSave(value) {
+  const signature = sharedSaveSignature(value);
+  if (!signature) return;
+  try { localStorage.setItem(SHARED_SAVE_SIGNATURE_KEY, signature); } catch (_) {}
+}
+
+function reloadGameAfterSave() {
+  const mobileReload = window.__POKEIDLE_MOBILE_RELOAD__;
+  if (typeof mobileReload === 'function') return mobileReload();
+  return location.reload();
+}
+
+function showSaveTransferMessage(message) {
+  const status = $('settingsContent')?.querySelector('#saveTransferStatus');
+  if (status) {
+    status.textContent = message;
+    status.classList.remove('success', 'error', 'busy');
+    status.classList.add('show', /成功|已恢复|已导出|已设置/.test(message) ? 'success' : 'error');
+  }
+  updateTextBox(message);
+}
+
+function showSaveTransferProgress(message) {
+  const status = $('settingsContent')?.querySelector('#saveTransferStatus');
+  if (!status) return;
+  status.textContent = message;
+  status.classList.remove('success', 'error');
+  status.classList.add('show', 'busy');
+}
+
+function getSaveTransferController() {
+  if (_saveTransferController) return _saveTransferController;
+  const requiredSaveSource = window.__POKEIDLE_MOBILE__?.saveGameData ? 'mobile' : null;
+  _saveTransferController = createSaveTransferController({
+    platform: createSavePlatform(),
+    getCurrent: () => gameData,
+    saveGame,
+    saveCurrent: () => saveGame({
+      strict: true,
+      requiredSource: requiredSaveSource,
+    }),
+    apply: value => { setGameData(value); ensureGpsState(); },
+    persist: () => saveGame({
+      strict: true,
+      preserveTimestamp: true,
+      requiredSource: requiredSaveSource,
+    }),
+    confirm: details => showSaveTransferDialog(document, details),
+    showMessage: showSaveTransferMessage,
+    showProgress: showSaveTransferProgress,
+    addLog: addSystemLog,
+    onSharedSaveWritten: rememberSharedSave,
+    onSharedSaveCandidate: rememberSharedSave,
+    reload: () => setTimeout(reloadGameAfterSave, 800),
+  });
+  return _saveTransferController;
+}
+
+export async function checkSharedSaveCandidate({ force = false } = {}) {
+  if (_sharedSaveCheckBusy || !window.__POKEIDLE_MOBILE__?.isMobile) return null;
+  _sharedSaveCheckBusy = true;
+  try {
+    const candidate = await createSavePlatform().readSharedSaveData();
+    if (!candidate?.configured) {
+      if (force) showSaveTransferMessage('请先设置外置存档目录');
+      return null;
+    }
+    if (!candidate.exists || !candidate.content) {
+      if (force) showSaveTransferMessage('外置存档文件不存在');
+      return null;
+    }
+    const signature = sharedSaveSignature(candidate);
+    let previous = null;
+    try { previous = localStorage.getItem(SHARED_SAVE_SIGNATURE_KEY); } catch (_) {}
+    if (!force && signature && signature === previous) return null;
+    return getSaveTransferController().importSharedSave(candidate);
+  } catch (error) {
+    if (force) showSaveTransferMessage(formatSaveTransferError(error));
+    return null;
+  } finally {
+    _sharedSaveCheckBusy = false;
+  }
+}
+
 export function showSettingsView() {
   pushNav('settingsView');
   ensureSettings(); // 保证旧档迁移（含捕捉条件四行表格结构）先于渲染执行
@@ -848,13 +941,13 @@ async function refreshBackgroundModeSupport() {
   }
 }
 
-// 捕捉条件表格：遇敌类型 × 三态策略（普通 / 普通闪 / 神兽 / 神兽闪 / 可悬赏）
-// 优先级：神兽/神兽闪 > 普通/普通闪 >可悬赏；可悬赏行只作用于非神兽遭遇
+// 捕捉条件表格：特效优先，其次是神兽、普通和悬赏条件。
 const CF_ROWS = [
-  { key: 'normal', label: '普通' },
-  { key: 'normalShiny', label: '普通闪' },
+  { key: 'twist', label: '特效' },
   { key: 'legend', label: '神兽' },
   { key: 'legendShiny', label: '神兽闪' },
+  { key: 'normal', label: '普通' },
+  { key: 'normalShiny', label: '普通闪' },
   { key: 'bounty', label: '可悬赏' },
 ];
 const CF_ACTIONS = [
@@ -874,6 +967,7 @@ export function renderSettings(container, s) {
   const autoBuffCharm = s.autoBuffCharm || false;
   const autoRefill = s.autoRefill || false;
   const shinyMasterBall = s.shinyMasterBall || false;
+  const variantMasterBall = s.variantMasterBall || false;
   const refillBalls = s.autoRefillBalls || { 'poke-ball': true, 'ultra-ball': false, 'master-ball': false };
   const order = (Array.isArray(s.autoRefillOrder) && s.autoRefillOrder.length === 3)
     ? s.autoRefillOrder : ['poke-ball', 'ultra-ball', 'master-ball'];
@@ -906,12 +1000,15 @@ export function renderSettings(container, s) {
           <input type="text" class="filter-lv-input cf-lv-input" data-row="${key}" data-lv="max" inputmode="numeric" autocomplete="off" maxlength="2" value="${r.levelMax || 20}" />
         </div>
       </td>` : `<td class="cf-cell lv${dim}">—</td>`;
+    const uncaughtCell = r.action === 'catch'
+      ? `<td class="cf-cell uncaught ${r.uncaughtOnly ? 'on' : ''}" data-row="${key}">${r.uncaughtOnly ? '☑' : '☐'}</td>`
+      : `<td class="cf-cell uncaught${dim}">—</td>`;
     return `
       <tr data-row="${key}">
         <th class="cf-row-label">${label}</th>
         ${actCells}
         ${lvCell}
-        <td class="cf-cell uncaught ${r.uncaughtOnly ? 'on' : ''}${dim}" data-row="${key}">${r.uncaughtOnly ? '☑' : '☐'}</td>
+        ${uncaughtCell}
       </tr>`;
   }).join('');
   container.innerHTML = `
@@ -939,6 +1036,12 @@ export function renderSettings(container, s) {
           <div class="settings-sub-title">闪光使用大师球</div>
           <div class="ball-check-row">
             <span class="ball-check ${shinyMasterBall ? 'on' : ''}" id="toggleShinyMaster">${shinyMasterBall ? '☑' : '☐'}启用</span>
+          </div>
+        </div>
+        <div style="padding:4px 4px 2px;">
+          <div class="settings-sub-title">外观特效(RGB/污染)使用大师球</div>
+          <div class="ball-check-row">
+            <span class="ball-check ${variantMasterBall ? 'on' : ''}" id="toggleVariantMaster">${variantMasterBall ? '☑' : '☐'}启用</span>
           </div>
         </div>
         ` : ''}
@@ -1102,6 +1205,15 @@ export function renderSettings(container, s) {
           <span class="auto-catch-label">导入存档</span>
           <button type="button" class="reset-save-btn" id="importSaveBtn">导入</button>
         </div>
+        ${window.__POKEIDLE_MOBILE__?.isMobile ? `
+        <div class="reset-save-row">
+          <span class="auto-catch-label">外置存档目录</span>
+          <button type="button" class="reset-save-btn" id="configureSharedSaveBtn">设置</button>
+        </div>
+        <div class="reset-save-row">
+          <span class="auto-catch-label">检查外置存档</span>
+          <button type="button" class="reset-save-btn" id="checkSharedSaveBtn">检查</button>
+        </div>` : ''}
         <div class="reset-save-row">
           <span class="auto-catch-label">恢复导入前存档</span>
           <button type="button" class="reset-save-btn" id="restoreSaveBtn" disabled aria-disabled="true">恢复</button>
@@ -1132,6 +1244,7 @@ export function renderSettings(container, s) {
   `;
   container.querySelector('#toggleAutoCatch')?.addEventListener('click', toggleAutoCatch);
   container.querySelector('#toggleShinyMaster')?.addEventListener('click', toggleShinyMasterBall);
+  container.querySelector('#toggleVariantMaster')?.addEventListener('click', toggleVariantMasterBall);
   container.querySelector('#toggleMusicEnabled')?.addEventListener('click', toggleMusicEnabled);
   container.querySelector('#toggleSfxEnabled')?.addEventListener('click', toggleSfxEnabled);
   container.querySelector('#genderBrendan')?.addEventListener('click', () => toggleGender('brendan'));
@@ -1178,53 +1291,15 @@ export function renderSettings(container, s) {
     }
     resetSave();
   });
-  const requiredSaveSource = window.__POKEIDLE_MOBILE__?.saveGameData ? 'mobile' : null;
-  const persistImportedSave = () => saveGame({
-    strict: true,
-    preserveTimestamp: true,
-    requiredSource: requiredSaveSource,
-  });
-  const reloadGame = () => {
-    const mobileReload = window.__POKEIDLE_MOBILE_RELOAD__;
-    if (typeof mobileReload === 'function') return mobileReload();
-    return location.reload();
-  };
-  const showSaveTransferMessage = message => {
-    const status = container.querySelector('#saveTransferStatus');
-    if (!status) return;
-    status.textContent = message;
-    status.classList.remove('success', 'error');
-    status.classList.add('show', /成功|已恢复|已导出/.test(message) ? 'success' : 'error');
-    updateTextBox(message);
-  };
-  const showSaveTransferProgress = message => {
-    const status = container.querySelector('#saveTransferStatus');
-    if (!status) return;
-    status.textContent = message;
-    status.classList.remove('success', 'error');
-    status.classList.add('show', 'busy');
-  };
   // 刷新游戏：先完成保存，再重载当前页面。
   container.querySelector('#reloadGameBtn')?.addEventListener('click', async () => {
     await saveGame();
-    reloadGame();
+    reloadGameAfterSave();
   });
   bindSaveTransferControls(container, {
-    platform: createSavePlatform(),
-    getCurrent: () => gameData,
-    saveGame,
-    saveCurrent: () => saveGame({
-      strict: true,
-      requiredSource: requiredSaveSource,
-    }),
-    apply: value => { setGameData(value); ensureGpsState(); },
-    persist: persistImportedSave,
-    confirm: details => showSaveTransferDialog(document, details),
-    showMessage: showSaveTransferMessage,
-    showProgress: showSaveTransferProgress,
-    addLog: addSystemLog,
-    reload: () => setTimeout(reloadGame, 800),
+    controller: getSaveTransferController(),
   });
+  container.querySelector('#checkSharedSaveBtn')?.addEventListener('click', () => checkSharedSaveCandidate({ force: true }));
   container.querySelector('#toggleBuffHoney')?.addEventListener('click', toggleAutoBuffHoney);
   container.querySelector('#toggleBuffCharm')?.addEventListener('click', toggleAutoBuffCharm);
   container.querySelector('#toggleAutoRefill')?.addEventListener('click', toggleAutoRefill);
@@ -1344,7 +1419,7 @@ export function renderSettings(container, s) {
     let v = '';
     try { v = await window.__TAURI__?.app?.getVersion?.(); } catch (_) {}
     const el = container.querySelector('#settingsVersion');
-    if (el) el.textContent = v ? `v${v}` : 'v1.1.0';
+    if (el) el.textContent = v ? `v${v}` : 'v1.1.2';
   })();
   // 版权声明：跳转声明视图
   container.querySelector('#declarationBtn')?.addEventListener('click', () => showDeclarationView());
@@ -1417,6 +1492,7 @@ function ensureSettings() {
   if (!gameData.settings.autoCatchBalls) gameData.settings.autoCatchBalls = { 'poke-ball': true, 'ultra-ball': true, 'master-ball': true };
   if (gameData.settings.autoRefill == null) gameData.settings.autoRefill = false;
   if (gameData.settings.shinyMasterBall == null) gameData.settings.shinyMasterBall = false; // 闪光使用大师球（默认关）
+  if (gameData.settings.variantMasterBall == null) gameData.settings.variantMasterBall = false; // 特效使用大师球（默认关）
   if (!gameData.settings.autoRefillBalls) gameData.settings.autoRefillBalls = { 'poke-ball': true, 'ultra-ball': false, 'master-ball': false };
   if (!Array.isArray(gameData.settings.autoRefillOrder) || gameData.settings.autoRefillOrder.length !== 3) {
     gameData.settings.autoRefillOrder = ['poke-ball', 'ultra-ball', 'master-ball']; // 默认便宜优先
@@ -1437,7 +1513,7 @@ function ensureSettings() {
     };
   }
   // 各行字段兜底 + 等级收敛
-  for (const k of ['normal', 'normalShiny', 'legend', 'legendShiny', 'bounty']) {
+  for (const k of ['twist', 'normal', 'normalShiny', 'legend', 'legendShiny', 'bounty']) {
     const r = gameData.settings.catchFilter.rows[k] = gameData.settings.catchFilter.rows[k] || { action: 'catch', levelMin: 1, levelMax: 20, uncaughtOnly: false };
     if (!['catch', 'stop', 'flee'].includes(r.action)) r.action = 'catch';
     r.levelMin = Math.max(0, Math.min(20, Number(r.levelMin) || 0));
@@ -1518,6 +1594,14 @@ export function toggleAutoBuffCharm() {
 function toggleShinyMasterBall() {
   ensureSettings();
   gameData.settings.shinyMasterBall = !gameData.settings.shinyMasterBall;
+  const container = $('settingsContent');
+  renderSettings(container, gameData.settings);
+  saveGame();
+}
+
+function toggleVariantMasterBall() {
+  ensureSettings();
+  gameData.settings.variantMasterBall = !gameData.settings.variantMasterBall;
   const container = $('settingsContent');
   renderSettings(container, gameData.settings);
   saveGame();
@@ -1861,6 +1945,7 @@ const TUTORIAL_SECTIONS = [
     html: `<p>在<b>手机</b>主页打开<b>农场</b>，点击空地种下树果种子（消耗 <b>${FARM_PLANT_COST}</b> 糖果）。</p>`
       + `<p>刚种下<b>湿度</b>为 <b>0</b>，点击<b>浇水</b>才会生长；湿度随时间下降（每 <b>${Math.round(1 / FARM_WATER_DROP)}</b> 秒降 <b>1</b> 点，满湿度可撑 <b>${Math.round(FARM_MAX_WATER / FARM_WATER_DROP / 60)}</b> 分钟），归 <b>0</b> 停止生长，需及时补浇。</p>`
       + `<p>历经刚种下→发芽→成长→开花结果后成熟（每棵 <b>${Math.round(FARM_MATURE_MIN / 60000)}~${Math.round(FARM_MATURE_MAX / 60000)}</b> 分钟随机），点击收获得 <b>${FARM_HARVEST_MIN}~${FARM_HARVEST_MAX}</b> 颗树果。</p>`
+      + `<p>右键生长中的植物可<b>铲除</b>，回收地块重新种植。</p>`
       + `<p>收获的树果存入库存（点田地左上角库存箱查看）；库存的树果不能当种子，种地只能另买新种子。</p>`
       + `<p>点田地右上角告示牌查看树果委托（每天刷新 <b>${FARM_BOARD_DEMANDS}</b> 条，其中 <b>1</b> 条为大量需求 <b>${FARM_BOARD_BIG_QTY_MIN}~${FARM_BOARD_BIG_QTY_MAX}</b> 颗、<b>1</b> 条为巨量需求 <b>${FARM_BOARD_MEGA_QTY_MIN}~${FARM_BOARD_MEGA_QTY_MAX}</b> 颗，需专门种植较久；需求越多报酬越高）。也可以在此面板招募帮手（详见「<b>招募帮手</b>」章节）。</p>`,
   },  
@@ -1998,7 +2083,9 @@ const TUTORIAL_SECTIONS = [
       + `<p>放入后槽位上点<b>配置</b>选时长、点<b>出发</b>才开始计时；速度越快的宝可梦完成得越早（耗时系数 <b>${DISPATCH_SPEED_MIN} ~ ${DISPATCH_SPEED_MAX}</b>）。糖果按所选时长结算（已含档位加成，结算时再随机浮动 <b>±${Math.round(DISPATCH_CANDY_JITTER * 100)}%</b>）：</p>`
       + tutorialTable(DISPATCH_DURATIONS.map((h, i) => [`<b>${h}</b> 小时`, `<b>${Math.round(h * DISPATCH_CANDY_PER_HOUR * DISPATCH_DUR_MULT[i])}</b> 颗`, `×<b>${DISPATCH_DUR_MULT[i]}</b>`]), ['时长', '糖果', '档位加成'], [56, 'auto', 'auto'])
       + `<p>时空扭曲出没的 <b>RGB</b> / <b>污染</b> 宝可梦派遣时糖果收益额外 <b>+${Math.round(DISPATCH_VARIANT_CANDY_BONUS * 100)}%</b>（详见「<b>事件</b>」章节）。</p>`
-      + `<p>道具方面，每 <b>1 小时</b> 攒 <b>${DISPATCH_VALUE_PER_HOUR}</b> 价值预算，按道具价值分配数量——便宜的堆数量、贵重的限 1 个（大师球/闪耀护符<b>不设侧重</b>，各属性都有机会掉）。不同<b>属性</b>带回的道具侧重不同（按<b>主属性</b>计算，双属性只看第一个）：</p>`
+      + `<p>道具方面，每 <b>1 小时</b> 攒 <b>${DISPATCH_VALUE_PER_HOUR}</b> 价值预算，按道具价值分配数量。各道具单件价值如下：</p>`
+      + tutorialTable(Object.entries(DISPATCH_ITEM_VALUE).map(([k, v]) => [ITEM_NAMES[k] || k, `<b>${v}</b>`]), ['道具', '单件价值'], ['auto', 'auto'])
+      + `<p>不同<b>属性</b>带回的道具侧重不同（按<b>主属性</b>计算，双属性只看第一个，仅提高抽中概率）：</p>`
       + tutorialTable(Object.entries(Object.entries(DISPATCH_TYPE_BOOST).reduce((acc, [type, boost]) => {
         for (const k of Object.keys(boost)) (acc[k] ||= []).push(type);
         return acc;

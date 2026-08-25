@@ -40,6 +40,21 @@ test('Android 导入、导出和备份优先调用移动 bridge', async () => {
   assert.equal(await platform.getAppVersion(), '1.0.9');
 });
 
+test('Android 平台转发共享目录选择、读取和写入', async () => {
+  const calls = [];
+  const mobile = {
+    selectSharedSaveDirectory: async () => { calls.push('select'); return { selected: true }; },
+    readSharedSaveData: async () => { calls.push('read'); return { name: 'pokeidle-save.json', content: '{}', size: 2, modifiedAt: 9 }; },
+    writeSharedSaveData: async (data, fileName) => { calls.push(['write', data, fileName]); return { written: true }; },
+  };
+  const platform = createSavePlatform({ win: { __POKEIDLE_MOBILE__: mobile }, doc: {}, storage: {} });
+
+  assert.deepEqual(await platform.selectSharedSaveDirectory(), { selected: true });
+  assert.deepEqual(await platform.readSharedSaveData(), { name: 'pokeidle-save.json', content: '{}', size: 2, modifiedAt: 9 });
+  assert.deepEqual(await platform.writeSharedSaveData('{"items":{}}', 'pokeidle-save.json'), { written: true });
+  assert.deepEqual(calls, ['select', 'read', ['write', '{"items":{}}', 'pokeidle-save.json']]);
+});
+
 test('Tauri 取消导入和导出时返回 null', async () => {
   const commands = [];
   const platform = createSavePlatform({

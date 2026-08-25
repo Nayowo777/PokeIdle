@@ -289,25 +289,28 @@ export function spawnItemDrop(itemKey) {
     if (phase === 'idle') { setIdleCharacter('walk'); road.resume(); }
   };
 
-  // 动画受理成功：后续由 frame/fly 驱动滚动与拾取入账，这里返回 true 让调用方扣减累积值
-  // （否则累积值永不扣减，糖果等高频道具会一直出动画）
-
-  const sRect = screen.getBoundingClientRect();
-  const cRect = charEl.getBoundingClientRect();
-  const charLeft = cRect.left - sRect.left;
-
-  // 物品放在路面上
+  // 动画使用未受移动端 transform 缩放影响的逻辑坐标。
+  const layout = getScreenLayoutMetrics();
+  const cRect = layout?.rect(charEl);
   const roadEl = document.querySelector('.road-layer');
-  const rRect = roadEl ? roadEl.getBoundingClientRect() : cRect;
-  const itemY = (rRect.top - sRect.top) + 24;
+  const rRect = layout?.rect(roadEl || charEl);
+  if (!layout || !cRect || !rRect) {
+    _dropEl = null;
+    _dropCancelCb = null;
+    el.remove();
+    setItemDropActive(false);
+    return false;
+  }
+  const charLeft = cRect.left;
+  const itemY = rRect.top + 24;
 
-  let itemX = sRect.width + 10;
+  let itemX = layout.width + 10;
   el.style.left = itemX + 'px';
   el.style.top = itemY + 'px';
   el.style.opacity = '1';
 
   const pickupX = charLeft + 10;
-  const cTop = cRect.top - sRect.top;
+  const cTop = cRect.top;
   let active = true;
 
   function cleanup() {
@@ -338,7 +341,7 @@ export function spawnItemDrop(itemKey) {
     const roadSpeed = road.getSpeed();
     itemX -= roadSpeed;
 
-    if (itemX > sRect.width + 100) { cleanup(); return; }
+    if (itemX > layout.width + 100) { cleanup(); return; }
 
     if (road.isBike()) {
       el.style.left = itemX + 'px';

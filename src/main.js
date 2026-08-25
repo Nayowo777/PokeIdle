@@ -52,7 +52,7 @@ import { restorePokedex, setupRegionDropdown, setupStatusDropdown, setupTypeFilt
 import { showRosterView, isRosterPicking, leaveRosterPicker, isRosterInDetail, isRosterDetailFromObtain, leaveRosterDetailToSource, restoreRosterList, isRosterDetailFromList, leaveRosterDetailToList, isRosterDetailJumpedToPokedex, returnRosterDetailFromPokedex, isRosterInMoveEdit, leaveMoveEditor, isBatchReleasing, cancelBatchRelease } from './roster.js';
 import { isTradeInDetail, restoreTradeList, refreshTrades, renderTrade, showTradeView } from './trade.js';
 import { showShopView, showSettingsView, showSystemLogs, showAchievementView,
-  showTutorialView, renderSystemLogs, applyWindowScale } from './views.js';
+  showTutorialView, renderSystemLogs, applyWindowScale, checkSharedSaveCandidate } from './views.js';
 import { showPhoneView, updateTradeBadge, updateBerryBadge, updateAchievementBadge, updatePhoneBadge, showIncubatorView } from './phone.js';
 import { gpsAddDistance, showGpsView, setRoamEnabled, startBikeTarget, abandonBikeTarget, teleportToTwist } from './gps.js';
 import { initAudio, resumeAudio, playRegion, playCycling, endCycling, stopVictory, stopCongratulation, setMusicEnabled, isMusicEnabled, setSplashLocked, setShowCardOnEncounterEnd, setBattleMusic, setSfxEnabled } from './audio.js';
@@ -828,6 +828,8 @@ async function init() {
 
   setLastRegionId(getCurrentRegion().id);
   await saveGame();
+  window.__POKEIDLE_SHARED_SAVE_CHECK__ = () => checkSharedSaveCandidate();
+  setTimeout(() => checkSharedSaveCandidate(), 800);
 
   // 调试命令统一在 debug.js 中登记（F12 控制台 window.__* 系列）
   await import('./debug.js');

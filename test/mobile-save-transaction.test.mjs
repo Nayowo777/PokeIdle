@@ -234,6 +234,109 @@ test('恢复导入存档的写入失败映射为稳定提示', async () => {
   assert.deepEqual(messages, ['存档写入失败，已尝试恢复当前存档']);
 });
 
+test('导入进入刷新阶段后不再启动导出文件选择器', async () => {
+  const events = [];
+  const platform = {
+    pickImportFile: async () => { events.push('read'); return { name: 'external.json', content: JSON.stringify(incoming), size: 42 }; },
+    exportSaveData: async () => { events.push('export'); },
+    createImportBackup: async () => { events.push('backup'); },
+    getAppVersion: async () => '1.1.1',
+  };
+  let active = structuredClone(current);
+  const controller = createSaveTransferController({
+    platform,
+    getCurrent: () => active,
+    saveCurrent: async () => events.push('save-current'),
+    apply: value => { active = value; events.push('apply'); },
+    persist: async () => events.push('persist'),
+    saveGame: async () => events.push('save-game'),
+    confirm: async () => true,
+    reload: () => events.push('reload'),
+  });
+
+  const importing = controller.importSave();
+  const exporting = controller.exportSave();
+  await Promise.all([importing, exporting]);
+  assert.deepEqual(events, ['read', 'save-current', 'backup', 'apply', 'persist', 'reload']);
+});
+
+test('选择共享目录后立即生成固定外置存档', async () => {
+  const events = [];
+  const controller = createSaveTransferController({
+    platform: {
+      selectSharedSaveDirectory: async () => { events.push('select'); return { selected: true }; },
+      writeSharedSaveData: async (data, name) => { events.push(['write', name, JSON.parse(data).items.candy]); return { written: true }; },
+      getAppVersion: async () => '1.1.1',
+    },
+    getCurrent: () => current,
+    saveGame: async () => events.push('save-game'),
+    showMessage: message => events.push(message),
+  });
+
+  assert.ok(await controller.configureSharedSave());
+  assert.deepEqual(events, [
+    'select',
+    'save-game',
+    ['write', 'pokeidle-save.json', 1],
+    '外置存档目录已设置并同步',
+  ]);
+});
+
+test('外置文件导入复用备份覆盖事务', async () => {
+  const events = [];
+  let active = structuredClone(current);
+  const candidate = {
+    configured: true,
+    exists: true,
+    name: 'pokeidle-save.json',
+    content: JSON.stringify(incoming),
+    size: 42,
+    fingerprint: 'new-save',
+  };
+  const controller = createSaveTransferController({
+    platform: {
+      readSharedSaveData: async () => candidate,
+      createImportBackup: async () => events.push('backup'),
+    },
+    getCurrent: () => active,
+    saveCurrent: async () => events.push('save-current'),
+    apply: value => { active = value; events.push('apply'); },
+    persist: async () => events.push('persist'),
+    confirm: async details => { events.push(details.source); return true; },
+    reload: () => events.push('reload'),
+  });
+
+  assert.ok(await controller.importSharedSave());
+  assert.deepEqual(events, ['pokeidle-save.json', 'save-current', 'backup', 'apply', 'persist', 'reload']);
+  assert.equal(active.items.candy, 9);
+});
+
+test('外置文件持久化失败时不记录候选指纹', async () => {
+  const events = [];
+  let active = structuredClone(current);
+  const controller = createSaveTransferController({
+    platform: {
+      readSharedSaveData: async () => ({
+        configured: true,
+        exists: true,
+        name: 'pokeidle-save.json',
+        content: JSON.stringify(incoming),
+        fingerprint: 'retry-this-save',
+      }),
+      createImportBackup: async () => {},
+    },
+    getCurrent: () => active,
+    saveCurrent: async () => {},
+    apply: value => { active = value; },
+    persist: async () => { throw new Error('temporary write failure'); },
+    confirm: async () => true,
+    onSharedSaveCandidate: file => events.push(file.fingerprint),
+  });
+
+  assert.equal(await controller.importSharedSave(), null);
+  assert.deepEqual(events, []);
+});
+
 test('存档错误映射为稳定的中文提示', () => {
   assert.equal(formatSaveTransferError({ code: 'FUTURE_VERSION' }), '此存档来自更新版本，请先升级应用');
   assert.equal(formatSaveTransferError({ code: 'SAVE_TOO_LARGE' }), '存档文件不能超过 20 MB');
@@ -242,4 +345,5 @@ test('存档错误映射为稳定的中文提示', () => {
   assert.equal(formatSaveTransferError({ code: 'IMPORT_READ_FAILED' }), '存档读取失败，请重新选择文件');
   assert.equal(formatSaveTransferError({ code: 'INVALID_FILE_URI' }), '无法读取所选存档文件');
   assert.equal(formatSaveTransferError({ code: 'EXPORT_WRITE_FAILED' }), '存档导出失败，请更换保存位置');
+  assert.equal(formatSaveTransferError({ code: 'SHARED_SAVE_READ_FAILED' }), '外置存档读取失败，请稍后重试');
 });

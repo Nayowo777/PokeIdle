@@ -160,6 +160,15 @@ npm run android:build
 
 Android 设置页的“后台挂机”仅在 Android 外壳中可用。首次启用需要允许通知权限；通知栏的“停止挂机”操作会同步关闭游戏内开关。后台服务不会播放动画或音乐，回到前台后会按时间戳补算期间的行走、导航、孵蛋、道具、遇敌、抓捕和逃跑结果。
 
+### Android 外置存档
+
+1. 在游戏设置页点击“外置存档目录”右侧的“设置”。
+2. 系统目录选择器会打开下载目录；新建或选择 `Download/PokeIdle`，然后确认使用该目录。
+3. 游戏会在目录中生成固定文件 `pokeidle-save.json`。此后可用文件管理器替换该文件，重新打开游戏或回到前台后确认导入。
+4. “检查外置存档”可随时手动读取固定文件。导入仍会先备份当前存档，校验成功后才覆盖并刷新游戏。
+
+共享目录使用 Android Storage Access Framework 持久授权，不申请全盘存储权限。应用更新外置文件时会维护 `pokeidle-save.json.bak` 和临时文件；手动迁移时只需替换 `pokeidle-save.json`。
+
 ## 主要素材来源
 
 - 宝可梦 GIF 动画：[play.pokemonshowdown.com](https://play.pokemonshowdown.com/)

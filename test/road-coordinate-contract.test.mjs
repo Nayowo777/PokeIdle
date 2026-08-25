@@ -58,3 +58,56 @@ for (const file of ['src/items.js', 'src/battle.js', 'src/events.js', 'src/follo
     assert.doesNotMatch(source, /screen\.getBoundingClientRect\(\)/);
   });
 }
+
+test('道路道具动画首帧使用逻辑布局宽度并继续运行', () => {
+  const source = fs.readFileSync('src/items.js', 'utf8');
+  const start = source.indexOf('export function spawnItemDrop');
+  const end = source.indexOf('\n// ---------- 放入孵蛋器', start);
+  assert.ok(start >= 0 && end > start, '应能提取 spawnItemDrop');
+
+  const frames = [];
+  const screen = { appendChild() {} };
+  const character = { kind: 'character' };
+  const roadLayer = { kind: 'road' };
+  const idleView = { style: { display: '' } };
+  const context = {
+    phase: 'idle',
+    _itemDropActive: false,
+    ITEM_ICONS: { candy: 'candy.png' },
+    ITEM_NAMES: { candy: '糖果' },
+    document: {
+      hidden: false,
+      createElement: () => ({ style: {}, remove() {} }),
+      querySelector: selector => selector === '.road-layer' ? roadLayer : null,
+    },
+    $: id => ({ screen, walkGif: character, idleView }[id] || null),
+    getScreenLayoutMetrics: () => ({
+      width: 274,
+      rect: element => element === character
+        ? { left: 24, top: 90, width: 24, height: 32 }
+        : { left: 0, top: 120, width: 274, height: 80 },
+    }),
+    road: {
+      isActive: () => true,
+      getSpeed: () => 2,
+      isBike: () => true,
+      resume() {},
+      pause() {},
+      getPlace: () => '',
+    },
+    requestAnimationFrame: callback => { frames.push(callback); },
+    rollCandyMult: () => 1,
+    setItemDropActive() {},
+    setIdleCharacter() {},
+    grantItem() {},
+    saveGame() {},
+    showIdlePickup() {},
+    performance: { now: () => 0 },
+  };
+  vm.runInNewContext(`let _dropEl = null; let _dropCancelCb = null;\n${source.slice(start, end).replace(/^export /, '')}`, context);
+
+  assert.equal(vm.runInNewContext("spawnItemDrop('candy')", context), true);
+  assert.equal(frames.length, 1);
+  assert.doesNotThrow(() => frames.shift()(0));
+  assert.equal(frames.length, 1);
+});

@@ -19,3 +19,13 @@ test('移动端提供安全刷新入口', () => {
   const source = fs.readFileSync('mobile/bridge-source.js', 'utf8');
   assert.match(source, /__POKEIDLE_MOBILE_RELOAD__/);
 });
+
+test('设置页提供外置存档目录与手动检查入口', () => {
+  const views = fs.readFileSync('src/views.js', 'utf8');
+  const bridge = fs.readFileSync('mobile/bridge-source.js', 'utf8');
+
+  assert.match(views, /configureSharedSaveBtn/);
+  assert.match(views, /checkSharedSaveBtn/);
+  assert.match(views, /pokeidle_shared_save_signature/);
+  assert.match(bridge, /__POKEIDLE_SHARED_SAVE_CHECK__/);
+});

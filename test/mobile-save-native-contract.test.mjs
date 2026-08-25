@@ -31,6 +31,48 @@ test('Android 原生存档插件使用 SAF 和私有目录原子写入', async (
   assert.match(activity, /registerPlugin\(PokeIdleSavePlugin\.class\)/);
 });
 
+test('Android 原生存档插件支持共享目录授权与固定外置存档', async () => {
+  const plugin = await readFile(new URL('../android/app/src/main/java/com/pokemon/idle/PokeIdleSavePlugin.java', import.meta.url), 'utf8');
+
+  assert.match(plugin, /Intent\.ACTION_OPEN_DOCUMENT_TREE/);
+  assert.match(plugin, /takePersistableUriPermission/);
+  assert.match(plugin, /SharedPreferences/);
+  assert.match(plugin, /pokeidle-save\.json/);
+  assert.match(plugin, /SHARED_SAVE_ACCESS_FAILED/);
+  assert.match(plugin, /AtomicBoolean/);
+  assert.match(plugin, /writeSharedSaveData/);
+  assert.match(plugin, /readSharedSaveData/);
+  assert.match(plugin, /MessageDigest/);
+});
+
+test('Android 外置存档替换失败时不会把半写文件当作可恢复主存档', async () => {
+  const plugin = await readFile(new URL('../android/app/src/main/java/com/pokemon/idle/PokeIdleSavePlugin.java', import.meta.url), 'utf8');
+
+  assert.match(plugin, /if \(backup == null\) throw new IOException\("无法创建共享存档备份"\)/);
+  assert.match(plugin, /backupReady = true/);
+  assert.match(plugin, /if \(failedTarget != null\) failedTarget\.delete\(\)/);
+  assert.match(plugin, /if \(backupReady\) restoreSharedBackup\(root, resolver\)/);
+  assert.doesNotMatch(plugin, /if \(root\.findFile\(SHARED_SAVE_FILE\) != null\) return/);
+});
+
+test('Android Activity 结果使用跨回调的一次性领取状态', async () => {
+  const plugin = await readFile(new URL('../android/app/src/main/java/com/pokemon/idle/PokeIdleSavePlugin.java', import.meta.url), 'utf8');
+
+  assert.match(plugin, /handledActivityCalls/);
+  assert.match(plugin, /claimActivityResult\(PluginCall call\)/);
+  assert.equal((plugin.match(/if \(!claimActivityResult\(call\)\) return;/g) || []).length, 3);
+});
+
+test('Android 外置存档临时读取失败不会清除持久目录授权', async () => {
+  const plugin = await readFile(new URL('../android/app/src/main/java/com/pokemon/idle/PokeIdleSavePlugin.java', import.meta.url), 'utf8');
+
+  assert.match(plugin, /hasPersistedSharedPermission\(Uri uri\)/);
+  assert.match(plugin, /if \(!hasPersistedSharedPermission\(treeUri\)\)[\s\S]*?clearSharedDirectory\(\)/);
+  assert.match(plugin, /catch \(SecurityException error\)[\s\S]*?clearSharedDirectory\(\)/);
+  assert.match(plugin, /catch \(Exception error\)[\s\S]*?SHARED_SAVE_READ_FAILED/);
+  assert.doesNotMatch(plugin, /catch \(SharedDirectoryUnavailableException \| SecurityException error\)/);
+});
+
 test('Android manifest 不申请公共存储权限', async () => {
   const manifest = await readFile(new URL('../android/app/src/main/AndroidManifest.xml', import.meta.url), 'utf8');
 
