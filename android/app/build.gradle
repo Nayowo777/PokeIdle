@@ -1,5 +1,16 @@
 apply plugin: 'com.android.application'
 
+import groovy.json.JsonSlurper
+
+def packageVersion = new JsonSlurper()
+    .parse(rootProject.file('../package.json'))
+    .version as String
+def packageVersionParts = packageVersion.tokenize('.').collect { it as Integer }
+if (packageVersionParts.size() != 3) {
+    throw new GradleException("无效的 package.json 版本号：${packageVersion}")
+}
+def packageVersionCode = packageVersionParts[0] * 1_000_000 + packageVersionParts[1] * 1_000 + packageVersionParts[2]
+
 def keystorePropertiesFile = rootProject.file('../mobile/keystore.properties')
 def keystoreProperties = new Properties()
 if (keystorePropertiesFile.exists()) {
@@ -32,8 +43,8 @@ android {
         applicationId "com.pokemon.idle"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 10014
-        versionName "1.0.14"
+        versionCode packageVersionCode
+        versionName packageVersion
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

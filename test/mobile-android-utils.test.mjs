@@ -51,3 +51,11 @@ test('release 签名使用 AGP 8 支持的 V3 签名属性', async () => {
   assert.doesNotMatch(buildGradle, /\bv3SigningEnabled\b/);
   assert.match(buildGradle, /\benableV3Signing\s*=\s*true\b/);
 });
+
+test('Android APK 版本跟随根 package.json', async () => {
+  const buildGradle = await readFile(new URL('../android/app/build.gradle', import.meta.url), 'utf8');
+
+  assert.match(buildGradle, /JsonSlurper/);
+  assert.match(buildGradle, /versionName\s+packageVersion/);
+  assert.doesNotMatch(buildGradle, /versionName\s+"1\.0\.14"/);
+});
